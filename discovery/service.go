@@ -38,6 +38,13 @@ func (d *Service) Periodic(interval time.Duration) error {
 		return fmt.Errorf("Periodic discovery is allready running")
 	}
 
+	mdns.Query(&mdns.QueryParam{
+		Service: "_googlecast._tcp",
+		Domain:  "local",
+		Timeout: time.Second * 1,
+		Entries: d.entriesCh,
+	})
+
 	ticker := time.NewTicker(interval)
 	d.stopPeriodic = make(chan struct{})
 	go func() {
@@ -47,7 +54,7 @@ func (d *Service) Periodic(interval time.Duration) error {
 				mdns.Query(&mdns.QueryParam{
 					Service: "_googlecast._tcp",
 					Domain:  "local",
-					Timeout: time.Second * 2,
+					Timeout: time.Second * 1,
 					Entries: d.entriesCh,
 				})
 			case <-d.stopPeriodic:

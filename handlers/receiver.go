@@ -1,10 +1,10 @@
 package handlers
 
 type Receiver struct {
-	Send func(Headers)
+	Send func(Headers) error
 }
 
-func (r *Receiver) SendCallback(send func(Headers)) {
+func (r *Receiver) SendCallback(send func(Headers) error) {
 	r.Send = send
 }
 

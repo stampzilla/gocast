@@ -1,10 +1,10 @@
 package handlers
 
 type Heartbeat struct {
-	Send func(Headers)
+	Send func(Headers) error
 }
 
-func (h *Heartbeat) SendCallback(send func(Headers)) {
+func (h *Heartbeat) SendCallback(send func(Headers) error) {
 	h.Send = send
 }
 

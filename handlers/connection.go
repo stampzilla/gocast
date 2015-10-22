@@ -1,10 +1,10 @@
 package handlers
 
 type Connection struct {
-	Send func(Headers)
+	Send func(Headers) error
 }
 
-func (c *Connection) SendCallback(send func(Headers)) {
+func (c *Connection) SendCallback(send func(Headers) error) {
 	c.Send = send
 }
 

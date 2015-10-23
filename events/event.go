@@ -1,4 +1,4 @@
-package gocast
+package events
 
 type Event interface {
 }

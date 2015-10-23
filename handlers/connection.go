@@ -1,12 +1,20 @@
 package handlers
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/stampzilla/gocast/events"
+)
 
 type Connection struct {
-	Send func(Headers) error
+	Dispatch func(events.Event)
+	Send     func(Headers) error
 }
 
-func (c *Connection) SendCallback(send func(Headers) error) {
+func (c *Connection) RegisterDispatch(dispatch func(events.Event)) {
+	c.Dispatch = dispatch
+}
+func (c *Connection) RegisterSend(send func(Headers) error) {
 	c.Send = send
 }
 

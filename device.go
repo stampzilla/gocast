@@ -4,6 +4,7 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/stampzilla/gocast/events"
 	"github.com/stampzilla/gocast/handlers"
 )
 
@@ -16,7 +17,7 @@ type Device struct {
 	wrapper *packetStream
 	id      int
 
-	eventListners []func(event Event)
+	eventListners []func(event events.Event)
 	subscriptions []*Subscription
 
 	connectionHandler Handler
@@ -26,7 +27,7 @@ type Device struct {
 
 func NewDevice() *Device {
 	return &Device{
-		eventListners: make([]func(event Event), 0),
+		eventListners: make([]func(event events.Event), 0),
 
 		connectionHandler: &handlers.Connection{},
 		heartbeatHandler:  &handlers.Heartbeat{},
@@ -75,6 +76,7 @@ func (d *Device) Subscribe(urn string, handler Handler) {
 
 	d.subscriptions = append(d.subscriptions, s)
 
-	handler.SendCallback(s.Send)
+	handler.RegisterSend(s.Send)
+	handler.RegisterDispatch(d.Dispatch)
 	handler.Connect()
 }

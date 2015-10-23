@@ -9,10 +9,11 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stampzilla/gocast/api"
+	"github.com/stampzilla/gocast/events"
 	"github.com/stampzilla/gocast/handlers"
 )
 
-func (d *Device) listener() {
+func (d *Device) reader() {
 	for {
 		packet := d.wrapper.Read()
 
@@ -47,7 +48,7 @@ func (d *Device) listener() {
 }
 
 func (d *Device) Connect() error {
-	event := ConnectedEvent{}
+	event := events.Connected{}
 	d.Dispatch(event)
 
 	//log.Printf("connecting to %s:%d ...", d.ip, d.port)
@@ -62,7 +63,7 @@ func (d *Device) Connect() error {
 	}
 
 	d.wrapper = NewPacketStream(d.conn)
-	go d.listener()
+	go d.reader()
 
 	d.Subscribe("urn:x-cast:com.google.cast.tp.connection", d.connectionHandler)
 	d.Subscribe("urn:x-cast:com.google.cast.tp.heartbeat", d.heartbeatHandler)
@@ -71,9 +72,13 @@ func (d *Device) Connect() error {
 	return nil
 }
 
-func (d *Device) Send(urn, sourceId, destinationId string, payload handlers.Headers) error {
-	d.id++
-	payload.RequestId = &d.id
+func (d *Device) Send(urn, sourceId, destinationId string, payload interface{}) error {
+	if p, ok := payload.(handlers.Headers); ok {
+		d.id++
+		p.RequestId = &d.id
+
+		payload = p
+	}
 
 	payloadJson, err := json.Marshal(payload)
 	if err != nil {

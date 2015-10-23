@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/stampzilla/gocast"
 	"github.com/stampzilla/gocast/discovery"
+	"github.com/stampzilla/gocast/events"
 )
 
 func main() {
@@ -33,13 +33,16 @@ func discoveryListner(discovery *discovery.Service) {
 		//device.Subscribe("urn:x-cast:plex", plexHandler)
 		//device.Subscribe("urn:x-cast:com.google.cast.media", mediaHandler)
 
-		device.OnEvent(func(event gocast.Event) {
+		device.OnEvent(func(event events.Event) {
 			switch data := event.(type) {
-			case gocast.ConnectedEvent:
-				fmt.Println(device.Name, " - Connected, weeihoo")
-			case gocast.DisconnectedEvent:
-				fmt.Println(device.Name, " - Disconnected, bah :/")
-			//gocast.RecevierEvent:
+			case events.Connected:
+				fmt.Println(device.Name(), "- Connected, weeihoo")
+			case events.Disconnected:
+				fmt.Println(device.Name(), "- Disconnected, bah :/")
+			case events.AppStarted:
+				fmt.Println(device.Name(), "- App started:", data.DisplayName, "(", data.AppID, ")")
+			case events.AppStopped:
+				fmt.Println(device.Name(), "- App stopped:", data.DisplayName, "(", data.AppID, ")")
 			//gocast.MediaEvent:
 			//plexEvent:
 			default:

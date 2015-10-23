@@ -3,15 +3,21 @@ package handlers
 import (
 	"fmt"
 	"time"
+
+	"github.com/stampzilla/gocast/events"
 )
 
 type Heartbeat struct {
-	Send func(Headers) error
+	Dispatch func(events.Event)
+	Send     func(Headers) error
 
 	ticker *time.Ticker
 }
 
-func (h *Heartbeat) SendCallback(send func(Headers) error) {
+func (h *Heartbeat) RegisterDispatch(dispatch func(events.Event)) {
+	h.Dispatch = dispatch
+}
+func (h *Heartbeat) RegisterSend(send func(Headers) error) {
 	h.Send = send
 }
 

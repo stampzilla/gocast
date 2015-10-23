@@ -1,5 +1,7 @@
 package handlers
 
+import "fmt"
+
 type Connection struct {
 	Send func(Headers) error
 }
@@ -17,4 +19,5 @@ func (c *Connection) Disconnect() {
 }
 
 func (c *Connection) Unmarshal(message string) {
+	fmt.Println("Connection received: ", message)
 }

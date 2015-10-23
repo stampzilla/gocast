@@ -27,7 +27,7 @@ func main() {
 
 func discoveryListner(discovery *discovery.Service) {
 	for device := range discovery.Found() {
-		fmt.Println(device)
+		fmt.Println("New device discoverd: ", device)
 
 		//plexHandler := NewPlexHandler()
 		//device.Subscribe("urn:x-cast:plex", plexHandler)
@@ -36,9 +36,9 @@ func discoveryListner(discovery *discovery.Service) {
 		device.OnEvent(func(event gocast.Event) {
 			switch data := event.(type) {
 			case gocast.ConnectedEvent:
-				fmt.Println("Connected, weeihoo")
+				fmt.Println(device.Name, " - Connected, weeihoo")
 			case gocast.DisconnectedEvent:
-				fmt.Println("Disconnected, bah :/")
+				fmt.Println(device.Name, " - Disconnected, bah :/")
 			//gocast.RecevierEvent:
 			//gocast.MediaEvent:
 			//plexEvent:

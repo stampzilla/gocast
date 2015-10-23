@@ -26,7 +26,7 @@ func (w *packetStream) readPackets() {
 
 			err := binary.Read(w.stream, binary.BigEndian, &length)
 			if err != nil {
-				log.Fatalf("Failed to read packet length: %s", err)
+				log.Fatalf("Failed binary.Read packet: %s", err)
 			}
 
 			if length > 0 {
@@ -40,8 +40,6 @@ func (w *packetStream) readPackets() {
 				if i != int(length) {
 					log.Fatalf("Invalid packet size. Wanted: %d Read: %d", length, i)
 				}
-
-				log.Printf("Got packet of size %d", length)
 
 				w.packets <- &packet
 			}

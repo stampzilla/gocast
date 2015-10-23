@@ -19,7 +19,7 @@ func (s *Subscription) Send(payload handlers.Headers) error {
 
 func (s *Subscription) Receive(message *api.CastMessage, headers *handlers.Headers) bool {
 	// Just skip the message if it isnt to this subscription
-	if *message.SourceId != s.DestinationId || *message.DestinationId != s.SourceId || *message.Namespace != s.Urn {
+	if *message.SourceId != s.DestinationId || (*message.DestinationId != s.SourceId && *message.DestinationId != "*") || *message.Namespace != s.Urn {
 		return false
 	}
 

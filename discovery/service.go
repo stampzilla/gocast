@@ -103,6 +103,9 @@ func (d *Service) listner() {
 		device.SetIp(entry.AddrV4)
 		device.SetPort(entry.Port)
 
+		info := decodeTxtRecord(entry.Info)
+		device.SetUuid(info["id"])
+
 		d.foundDevices[key] = device
 
 		select {
@@ -127,4 +130,18 @@ func decodeDnsEntry(text string) string {
 	})
 
 	return text
+}
+
+func decodeTxtRecord(txt string) map[string]string {
+	m := make(map[string]string)
+
+	s := strings.Split(txt, "|")
+	for _, v := range s {
+		s := strings.Split(v, "=")
+		if len(s) == 2 {
+			m[s[0]] = s[1]
+		}
+	}
+
+	return m
 }

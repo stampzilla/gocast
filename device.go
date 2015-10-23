@@ -9,6 +9,7 @@ import (
 
 type Device struct {
 	name    string
+	uuid    string
 	ip      net.IP
 	port    int
 	conn    net.Conn
@@ -18,9 +19,9 @@ type Device struct {
 	eventListners []func(event Event)
 	subscriptions []*Subscription
 
-	connectionHandler *handlers.Connection
-	heartbeatHandler  *handlers.Heartbeat
-	receiverHandler   *handlers.Receiver
+	connectionHandler Handler
+	heartbeatHandler  Handler
+	receiverHandler   Handler
 }
 
 func NewDevice() *Device {
@@ -35,6 +36,9 @@ func NewDevice() *Device {
 
 func (d *Device) SetName(name string) {
 	d.name = name
+}
+func (d *Device) SetUuid(uuid string) {
+	d.uuid = uuid
 }
 
 func (d *Device) SetIp(ip net.IP) {

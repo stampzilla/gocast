@@ -27,7 +27,7 @@ func main() {
 
 func discoveryListner(discovery *discovery.Service) {
 	for device := range discovery.Found() {
-		fmt.Println("New device discoverd: ", device)
+		fmt.Printf("New device discoverd: %#v \n", device)
 
 		//plexHandler := NewPlexHandler()
 		//device.Subscribe("urn:x-cast:plex", plexHandler)

@@ -2,6 +2,7 @@ package gocast
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"log"
 )
@@ -26,7 +27,9 @@ func (w *packetStream) readPackets() {
 
 			err := binary.Read(w.stream, binary.BigEndian, &length)
 			if err != nil {
-				log.Fatalf("Failed binary.Read packet: %s", err)
+				fmt.Printf("Failed binary.Read packet: %s", err)
+				close(w.packets)
+				return
 			}
 
 			if length > 0 {
@@ -34,11 +37,11 @@ func (w *packetStream) readPackets() {
 
 				i, err := w.stream.Read(packet)
 				if err != nil {
-					log.Fatalf("Failed to read packet: %s", err)
+					fmt.Printf("Failed to read packet: %s", err)
 				}
 
 				if i != int(length) {
-					log.Fatalf("Invalid packet size. Wanted: %d Read: %d", length, i)
+					fmt.Printf("Invalid packet size. Wanted: %d Read: %d", length, i)
 				}
 
 				w.packets <- &packet

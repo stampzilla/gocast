@@ -51,5 +51,10 @@ func discoveryListner(discovery *discovery.Service) {
 		})
 
 		device.Connect()
+
+		go func() {
+			<-time.After(time.Millisecond * 2)
+			device.Disconnect()
+		}()
 	}
 }

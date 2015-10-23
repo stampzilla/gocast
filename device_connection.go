@@ -17,6 +17,14 @@ func (d *Device) reader() {
 	for {
 		packet := d.wrapper.Read()
 
+		if packet == nil {
+			fmt.Println("\ndisconnected...")
+			for _, subscription := range d.subscriptions {
+				subscription.Handler.Disconnect()
+			}
+			return
+		}
+
 		message := &api.CastMessage{}
 		err := proto.Unmarshal(*packet, message)
 		if err != nil {
@@ -72,6 +80,11 @@ func (d *Device) Connect() error {
 	return nil
 }
 
+func (d *Device) Disconnect() {
+	d.conn.Close()
+	d.conn = nil
+}
+
 func (d *Device) Send(urn, sourceId, destinationId string, payload interface{}) error {
 	if p, ok := payload.(handlers.Headers); ok {
 		d.id++
@@ -105,6 +118,10 @@ func (d *Device) Send(urn, sourceId, destinationId string, payload interface{}) 
 	}
 
 	//spew.Dump("Writing", message)
+
+	if d.conn == nil {
+		return fmt.Errorf("We are disconnected, cannot send!")
+	}
 
 	_, err = d.wrapper.Write(&data)
 

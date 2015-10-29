@@ -11,7 +11,8 @@ type Heartbeat struct {
 	Dispatch func(events.Event)
 	Send     func(Headers) error
 
-	ticker *time.Ticker
+	ticker   *time.Ticker
+	shutdown chan struct{}
 }
 
 func (h *Heartbeat) RegisterDispatch(dispatch func(events.Event)) {
@@ -24,14 +25,22 @@ func (h *Heartbeat) RegisterSend(send func(Headers) error) {
 func (h *Heartbeat) Connect() {
 	if h.ticker != nil {
 		h.ticker.Stop()
-		h.ticker = nil
+		if h.shutdown != nil {
+			close(h.shutdown)
+			h.shutdown = nil
+		}
 	}
 
 	h.ticker = time.NewTicker(time.Second * 5)
+	h.shutdown = make(chan struct{})
 	go func() {
 		for {
-			<-h.ticker.C
-			h.Ping()
+			select {
+			case <-h.ticker.C:
+				h.Ping()
+			case <-h.shutdown:
+				return
+			}
 		}
 	}()
 
@@ -40,7 +49,10 @@ func (h *Heartbeat) Connect() {
 func (h *Heartbeat) Disconnect() {
 	if h.ticker != nil {
 		h.ticker.Stop()
-		h.ticker = nil
+		if h.shutdown != nil {
+			close(h.shutdown)
+			h.shutdown = nil
+		}
 	}
 }
 

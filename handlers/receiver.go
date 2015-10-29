@@ -22,20 +22,22 @@ func (r *Receiver) RegisterSend(send func(Headers) error) {
 }
 
 func (r *Receiver) Connect() {
+	// Request a new status update
 	r.Send(Headers{Type: "GET_STATUS"})
 }
 
 func (r *Receiver) Disconnect() {
+	r.knownApplications = make(map[string]ApplicationSession, 0)
 }
 
 func (r *Receiver) Unmarshal(message string) {
-	fmt.Println("Receiver received: ", message)
+	//fmt.Println("Receiver received: ", message)
 
 	response := &StatusResponse{}
 	err := json.Unmarshal([]byte(message), response)
 
 	if err != nil {
-		fmt.Errorf("Failed to unmarshal status message:%s - %s", err, message)
+		fmt.Printf("Failed to unmarshal status message:%s - %s\n", err, message)
 		return
 	}
 

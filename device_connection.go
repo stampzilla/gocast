@@ -18,10 +18,14 @@ func (d *Device) reader() {
 		packet := d.wrapper.Read()
 
 		if packet == nil {
-			fmt.Println("\ndisconnected...")
 			for _, subscription := range d.subscriptions {
 				subscription.Handler.Disconnect()
 			}
+
+			d.subscriptions = make([]*Subscription, 0)
+
+			event := events.Disconnected{}
+			d.Dispatch(event)
 			return
 		}
 
@@ -56,9 +60,6 @@ func (d *Device) reader() {
 }
 
 func (d *Device) Connect() error {
-	event := events.Connected{}
-	d.Dispatch(event)
-
 	//log.Printf("connecting to %s:%d ...", d.ip, d.port)
 
 	var err error
@@ -69,6 +70,9 @@ func (d *Device) Connect() error {
 	if err != nil {
 		return fmt.Errorf("Failed to connect to Chromecast. Error:%s", err)
 	}
+
+	event := events.Connected{}
+	d.Dispatch(event)
 
 	d.wrapper = NewPacketStream(d.conn)
 	go d.reader()

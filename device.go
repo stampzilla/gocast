@@ -80,3 +80,15 @@ func (d *Device) Subscribe(urn string, handler Handler) {
 	handler.RegisterDispatch(d.Dispatch)
 	handler.Connect()
 }
+
+func (d *Device) GetIp() net.IP {
+	return d.ip
+}
+
+func (d *Device) GetPort() int {
+	return d.port
+}
+
+func (d *Device) GetUuid() string {
+	return d.uuid
+}

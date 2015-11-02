@@ -41,17 +41,24 @@ func (d *Device) SetName(name string) {
 func (d *Device) SetUuid(uuid string) {
 	d.uuid = uuid
 }
-
 func (d *Device) SetIp(ip net.IP) {
 	d.ip = ip
 }
-
 func (d *Device) SetPort(port int) {
 	d.port = port
 }
 
 func (d *Device) Name() string {
 	return d.name
+}
+func (d *Device) Uuid() string {
+	return d.uuid
+}
+func (d *Device) Ip() net.IP {
+	return d.ip
+}
+func (d *Device) Port() int {
+	return d.port
 }
 
 func (d *Device) String() string {
@@ -79,16 +86,4 @@ func (d *Device) Subscribe(urn string, handler Handler) {
 	handler.RegisterSend(s.Send)
 	handler.RegisterDispatch(d.Dispatch)
 	handler.Connect()
-}
-
-func (d *Device) GetIp() net.IP {
-	return d.ip
-}
-
-func (d *Device) GetPort() int {
-	return d.port
-}
-
-func (d *Device) GetUuid() string {
-	return d.uuid
 }

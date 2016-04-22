@@ -5,35 +5,36 @@ import (
 	"fmt"
 
 	"github.com/stampzilla/gocast/events"
+	"github.com/stampzilla/gocast/responses"
 )
 
 type Receiver struct {
 	Dispatch func(events.Event)
-	Send     func(Headers) error
+	Send     func(responses.Headers) error
 
-	knownApplications map[string]ApplicationSession
+	knownApplications map[string]responses.ApplicationSession
 }
 
 func (r *Receiver) RegisterDispatch(dispatch func(events.Event)) {
 	r.Dispatch = dispatch
 }
-func (r *Receiver) RegisterSend(send func(Headers) error) {
+func (r *Receiver) RegisterSend(send func(responses.Headers) error) {
 	r.Send = send
 }
 
 func (r *Receiver) Connect() {
 	// Request a new status update
-	r.Send(Headers{Type: "GET_STATUS"})
+	r.Send(responses.Headers{Type: "GET_STATUS"})
 }
 
 func (r *Receiver) Disconnect() {
-	r.knownApplications = make(map[string]ApplicationSession, 0)
+	r.knownApplications = make(map[string]responses.ApplicationSession, 0)
 }
 
 func (r *Receiver) Unmarshal(message string) {
-	//fmt.Println("Receiver received: ", message)
+	fmt.Println("Receiver received: ", message)
 
-	response := &StatusResponse{}
+	response := &responses.ReceiverResponse{}
 	err := json.Unmarshal([]byte(message), response)
 
 	if err != nil {
@@ -41,9 +42,9 @@ func (r *Receiver) Unmarshal(message string) {
 		return
 	}
 
-	prev := make(map[string]ApplicationSession, 0)
+	prev := make(map[string]responses.ApplicationSession, 0)
 	if r.knownApplications == nil {
-		r.knownApplications = make(map[string]ApplicationSession, 0)
+		r.knownApplications = make(map[string]responses.ApplicationSession, 0)
 	}
 
 	// Make a copy of known applications
@@ -77,33 +78,8 @@ func (r *Receiver) Unmarshal(message string) {
 			DisplayName: app.DisplayName,
 		})
 	}
-}
 
-type StatusResponse struct {
-	Headers
-	Status *ReceiverStatus `json:"status,omitempty"`
-}
-
-type ReceiverStatus struct {
-	Headers
-	Applications []*ApplicationSession `json:"applications"`
-	Volume       *Volume               `json:"volume,omitempty"`
-}
-
-type ApplicationSession struct {
-	AppID       string      `json:"appId,omitempty"`
-	DisplayName string      `json:"displayName,omitempty"`
-	Namespaces  []Namespace `json:"namespaces"`
-	SessionID   string      `json:"sessionId,omitempty"`
-	StatusText  string      `json:"statusText,omitempty"`
-	TransportId string      `json:"transportId,omitempty"`
-}
-
-type Namespace struct {
-	Name string `json:"name"`
-}
-
-type Volume struct {
-	Level *float64 `json:"level,omitempty"`
-	Muted *bool    `json:"muted,omitempty"`
+	r.Dispatch(events.ReceiverStatus{
+		Status: response.Status,
+	})
 }

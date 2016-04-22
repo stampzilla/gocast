@@ -1,4 +1,4 @@
-package handlers
+package responses
 
 type Headers struct {
 	Type      string `json:"type"`

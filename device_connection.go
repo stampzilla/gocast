@@ -10,7 +10,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
-	"github.com/stampzilla/gocast/handlers"
+	"github.com/stampzilla/gocast/responses"
 )
 
 func (d *Device) reader() {
@@ -37,7 +37,7 @@ func (d *Device) reader() {
 
 		//spew.Dump("Message!", message)
 
-		var headers handlers.Headers
+		var headers responses.Headers
 
 		err = json.Unmarshal([]byte(*message.PayloadUtf8), &headers)
 
@@ -90,7 +90,7 @@ func (d *Device) Disconnect() {
 }
 
 func (d *Device) Send(urn, sourceId, destinationId string, payload interface{}) error {
-	if p, ok := payload.(handlers.Headers); ok {
+	if p, ok := payload.(responses.Headers); ok {
 		d.id++
 		p.RequestId = &d.id
 

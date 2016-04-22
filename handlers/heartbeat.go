@@ -5,11 +5,12 @@ import (
 	"time"
 
 	"github.com/stampzilla/gocast/events"
+	"github.com/stampzilla/gocast/responses"
 )
 
 type Heartbeat struct {
 	Dispatch func(events.Event)
-	Send     func(Headers) error
+	Send     func(responses.Headers) error
 
 	ticker   *time.Ticker
 	shutdown chan struct{}
@@ -18,7 +19,7 @@ type Heartbeat struct {
 func (h *Heartbeat) RegisterDispatch(dispatch func(events.Event)) {
 	h.Dispatch = dispatch
 }
-func (h *Heartbeat) RegisterSend(send func(Headers) error) {
+func (h *Heartbeat) RegisterSend(send func(responses.Headers) error) {
 	h.Send = send
 }
 
@@ -61,9 +62,9 @@ func (h *Heartbeat) Unmarshal(message string) {
 }
 
 func (h *Heartbeat) Ping() {
-	h.Send(Headers{Type: "PING"})
+	h.Send(responses.Headers{Type: "PING"})
 }
 
 func (h *Heartbeat) Pong() {
-	h.Send(Headers{Type: "PONG"})
+	h.Send(responses.Headers{Type: "PONG"})
 }

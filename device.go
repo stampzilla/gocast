@@ -65,9 +65,9 @@ func (d *Device) String() string {
 	return d.name + " - " + d.ip.String() + ":" + strconv.Itoa(d.port)
 }
 
-func (d *Device) Subscribe(urn string, handler Handler) {
+func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 	sourceId := "sender-0"
-	destinationId := "receiver-0"
+	//destinationId := "receiver-0"
 
 	s := &Subscription{
 		Urn:           urn,
@@ -76,6 +76,8 @@ func (d *Device) Subscribe(urn string, handler Handler) {
 		Handler:       handler,
 		Device:        d,
 	}
+
+	//log.Println("Subscribing to ", urn, " --- ", destinationId)
 
 	//callback := func(payload handlers.Headers) error {
 	//return d.Send(urn, sourceId, destinationId, payload)

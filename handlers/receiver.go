@@ -66,6 +66,7 @@ func (r *Receiver) Unmarshal(message string) {
 		r.Dispatch(events.AppStarted{
 			AppID:       app.AppID,
 			DisplayName: app.DisplayName,
+			TransportId: app.TransportId,
 		})
 	}
 
@@ -76,6 +77,7 @@ func (r *Receiver) Unmarshal(message string) {
 		r.Dispatch(events.AppStopped{
 			AppID:       app.AppID,
 			DisplayName: app.DisplayName,
+			TransportId: app.TransportId,
 		})
 	}
 

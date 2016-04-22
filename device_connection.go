@@ -77,9 +77,9 @@ func (d *Device) Connect() error {
 	d.wrapper = NewPacketStream(d.conn)
 	go d.reader()
 
-	d.Subscribe("urn:x-cast:com.google.cast.tp.connection", d.connectionHandler)
-	d.Subscribe("urn:x-cast:com.google.cast.tp.heartbeat", d.heartbeatHandler)
-	d.Subscribe("urn:x-cast:com.google.cast.receiver", d.receiverHandler)
+	d.Subscribe("urn:x-cast:com.google.cast.tp.connection", "receiver-0", d.connectionHandler)
+	d.Subscribe("urn:x-cast:com.google.cast.tp.heartbeat", "receiver-0", d.heartbeatHandler)
+	d.Subscribe("urn:x-cast:com.google.cast.receiver", "receiver-0", d.receiverHandler)
 
 	return nil
 }

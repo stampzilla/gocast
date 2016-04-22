@@ -10,7 +10,7 @@ import (
 
 type Heartbeat struct {
 	Dispatch func(events.Event)
-	Send     func(responses.Headers) error
+	send     func(interface{}) error
 
 	ticker   *time.Ticker
 	shutdown chan struct{}
@@ -19,8 +19,12 @@ type Heartbeat struct {
 func (h *Heartbeat) RegisterDispatch(dispatch func(events.Event)) {
 	h.Dispatch = dispatch
 }
-func (h *Heartbeat) RegisterSend(send func(responses.Headers) error) {
-	h.Send = send
+func (h *Heartbeat) RegisterSend(send func(interface{}) error) {
+	h.send = send
+}
+
+func (h *Heartbeat) Send(p interface{}) error {
+	return h.send(p)
 }
 
 func (h *Heartbeat) Connect() {

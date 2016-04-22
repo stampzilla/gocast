@@ -10,7 +10,7 @@ import (
 
 type Receiver struct {
 	Dispatch func(events.Event)
-	Send     func(responses.Headers) error
+	send     func(interface{}) error
 
 	knownApplications map[string]responses.ApplicationSession
 }
@@ -18,8 +18,12 @@ type Receiver struct {
 func (r *Receiver) RegisterDispatch(dispatch func(events.Event)) {
 	r.Dispatch = dispatch
 }
-func (r *Receiver) RegisterSend(send func(responses.Headers) error) {
-	r.Send = send
+func (r *Receiver) RegisterSend(send func(interface{}) error) {
+	r.send = send
+}
+
+func (r *Receiver) Send(p interface{}) error {
+	return r.send(p)
 }
 
 func (r *Receiver) Connect() {

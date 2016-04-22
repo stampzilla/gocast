@@ -13,7 +13,7 @@ type Subscription struct {
 	Device        *Device
 }
 
-func (s *Subscription) Send(payload responses.Headers) error {
+func (s *Subscription) Send(payload interface{}) error {
 	return s.Device.Send(s.Urn, s.SourceId, s.DestinationId, payload)
 }
 

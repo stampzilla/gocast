@@ -1,13 +1,11 @@
 package gocast
 
-import (
-	"github.com/stampzilla/gocast/events"
-	"github.com/stampzilla/gocast/responses"
-)
+import "github.com/stampzilla/gocast/events"
 
 type Handler interface {
-	RegisterSend(func(responses.Headers) error)
+	RegisterSend(func(interface{}) error)
 	RegisterDispatch(func(events.Event))
+	Send(interface{}) error
 
 	Connect()
 	Disconnect()

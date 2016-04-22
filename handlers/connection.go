@@ -9,14 +9,18 @@ import (
 
 type Connection struct {
 	Dispatch func(events.Event)
-	Send     func(responses.Headers) error
+	send     func(interface{}) error
 }
 
 func (c *Connection) RegisterDispatch(dispatch func(events.Event)) {
 	c.Dispatch = dispatch
 }
-func (c *Connection) RegisterSend(send func(responses.Headers) error) {
-	c.Send = send
+func (c *Connection) RegisterSend(send func(interface{}) error) {
+	c.send = send
+}
+
+func (c *Connection) Send(p interface{}) error {
+	return c.send(p)
 }
 
 func (c *Connection) Connect() {

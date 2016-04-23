@@ -8,11 +8,19 @@ import (
 
 type packetStream struct {
 	stream  io.ReadWriteCloser
-	packets chan *[]byte
+	packets chan packetContainer
+}
+
+type packetContainer struct {
+	payload *[]byte
+	err     error
 }
 
 func NewPacketStream(stream io.ReadWriteCloser) *packetStream {
-	wrapper := packetStream{stream, make(chan *[]byte)}
+	wrapper := packetStream{
+		stream:  stream,
+		packets: make(chan packetContainer),
+	}
 	wrapper.readPackets()
 
 	return &wrapper
@@ -27,7 +35,7 @@ func (w *packetStream) readPackets() {
 			err := binary.Read(w.stream, binary.BigEndian, &length)
 			if err != nil {
 				//fmt.Printf("Failed binary.Read packet: %s", err)
-				close(w.packets)
+				w.packets <- packetContainer{err: err, payload: nil}
 				return
 			}
 
@@ -45,15 +53,22 @@ func (w *packetStream) readPackets() {
 					continue
 				}
 
-				w.packets <- &packet
+				w.packets <- packetContainer{
+					payload: &packet,
+					err:     nil,
+				}
 			}
 
 		}
 	}()
 }
 
-func (w *packetStream) Read() *[]byte {
-	return <-w.packets
+func (w *packetStream) Read() (*[]byte, error) {
+	pkt := <-w.packets
+	if pkt.err != nil {
+		close(w.packets)
+	}
+	return pkt.payload, pkt.err
 }
 
 func (w *packetStream) Write(data *[]byte) (int, error) {

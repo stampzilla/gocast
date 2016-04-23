@@ -10,12 +10,13 @@ import (
 )
 
 type Device struct {
-	name    string
-	uuid    string
-	ip      net.IP
-	port    int
-	conn    net.Conn
-	wrapper *packetStream
+	name      string
+	uuid      string
+	ip        net.IP
+	port      int
+	conn      net.Conn
+	wrapper   *packetStream
+	reconnect chan struct{}
 
 	eventListners []func(event events.Event)
 	subscriptions []*Subscription
@@ -27,8 +28,8 @@ type Device struct {
 
 func NewDevice() *Device {
 	return &Device{
-		eventListners: make([]func(event events.Event), 0),
-
+		eventListners:     make([]func(event events.Event), 0),
+		reconnect:         make(chan struct{}),
 		connectionHandler: &handlers.Connection{},
 		heartbeatHandler:  &handlers.Heartbeat{},
 		ReceiverHandler:   &handlers.Receiver{},

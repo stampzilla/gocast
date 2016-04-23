@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gogo/protobuf/proto"
@@ -15,24 +16,20 @@ import (
 
 func (d *Device) reader() {
 	for {
-		packet := d.wrapper.Read()
+		packet, err := d.wrapper.Read()
 
-		if packet == nil {
-			for _, subscription := range d.subscriptions {
-				subscription.Handler.Disconnect()
-			}
-
-			d.subscriptions = make([]*Subscription, 0)
-
-			event := events.Disconnected{}
-			d.Dispatch(event)
+		if err != nil && packet == nil {
+			log.Println(err)
+			d.Disconnect()
+			d.reconnect <- struct{}{}
 			return
 		}
 
 		message := &api.CastMessage{}
-		err := proto.Unmarshal(*packet, message)
+		err = proto.Unmarshal(*packet, message)
 		if err != nil {
 			log.Fatalf("Failed to unmarshal CastMessage: %s", err)
+			continue
 		}
 
 		//spew.Dump("Message!", message)
@@ -43,6 +40,7 @@ func (d *Device) reader() {
 
 		if err != nil {
 			log.Fatalf("Failed to unmarshal message: %s", err)
+			continue
 		}
 
 		catched := false
@@ -60,6 +58,24 @@ func (d *Device) reader() {
 }
 
 func (d *Device) Connect() error {
+	err := d.connect()
+	if err != nil {
+		return err
+	}
+	go d.reconnector()
+	return nil
+}
+func (d *Device) reconnector() {
+	for {
+		select {
+		case <-d.reconnect:
+			log.Println("Reconnect signal received")
+			time.Sleep(time.Second * 10)
+			d.connect()
+		}
+	}
+}
+func (d *Device) connect() error {
 	//log.Printf("connecting to %s:%d ...", d.ip, d.port)
 
 	var err error
@@ -85,6 +101,13 @@ func (d *Device) Connect() error {
 }
 
 func (d *Device) Disconnect() {
+	for _, subscription := range d.subscriptions {
+		subscription.Handler.Disconnect()
+	}
+
+	d.subscriptions = make([]*Subscription, 0)
+	d.Dispatch(events.Disconnected{})
+
 	d.conn.Close()
 	d.conn = nil
 }

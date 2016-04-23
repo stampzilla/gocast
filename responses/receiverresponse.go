@@ -22,6 +22,15 @@ type ApplicationSession struct {
 	TransportId string      `json:"transportId,omitempty"`
 }
 
+func (as *ApplicationSession) HasNamespace(ns string) bool {
+	for _, v := range as.Namespaces {
+		if v.Name == ns {
+			return true
+		}
+	}
+	return false
+}
+
 type Namespace struct {
 	Name string `json:"name"`
 }

@@ -1,54 +1,69 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 
-	"github.com/stampzilla/gocast/events"
 	"github.com/stampzilla/gocast/responses"
 )
 
 type Media struct {
-	Dispatch func(events.Event)
-	send     func(interface{}) error
-
-	//knownApplications map[string]responses.ApplicationSession
+	baseHandler
+	currentStatus  *MediaStatus
+	mediaSessionId int
 }
 
-func (r *Media) RegisterDispatch(dispatch func(events.Event)) {
-	r.Dispatch = dispatch
-}
-func (r *Media) RegisterSend(send func(interface{}) error) {
-	r.send = send
-}
-
-func (m *Media) Send(p interface{}) error {
-	return m.send(p)
-}
-
-func (r *Media) Connect() {
+func (m *Media) Connect() {
 	// Request a new status update
 	log.Println("Connecting to media")
-	r.Send(responses.Headers{Type: "GET_STATUS"})
+	m.Send(&responses.Headers{Type: "GET_STATUS"})
 }
 
-func (r *Media) Disconnect() {
+func (m *Media) Disconnect() {
 	//r.knownApplications = make(map[string]responses.ApplicationSession, 0)
+	m.currentStatus = nil
 }
 
-func (r *Media) Unmarshal(message string) {
+func (m *Media) Unmarshal(message string) {
 	log.Println("Media received: ", message)
 
-	//response := &responses.Media{}
-	//err := json.Unmarshal([]byte(message), response)
+	response := &MediaStatusResponse{}
+	err := json.Unmarshal([]byte(message), response)
 
-	//if err != nil {
-	//fmt.Printf("Failed to unmarshal status message:%s - %s\n", err, message)
-	//return
+	if err != nil {
+		fmt.Printf("Failed to unmarshal status message:%s - %s\n", err, message)
+		return
+	}
+	//for _, status := range response.Status {
+	//m.mediaSessionId = status.MediaSessionID
 	//}
+
+	//log.Println("MEDIA SESSION ID: ", response.MediaSessionID)
+	if len(response.Status) > 0 {
+		m.currentStatus = response.Status[0]
+	}
 
 	//r.Dispatch(events.Media{
 	//Status: response.Status,
 	//})
+}
+func (m *Media) Play() {
+	if m.currentStatus != nil {
+		m.Send(&MediaCommand{commandMediaPlay, m.currentStatus.MediaSessionID})
+	}
+}
+
+func (m *Media) Pause() {
+	if m.currentStatus != nil {
+		m.Send(&MediaCommand{commandMediaPause, m.currentStatus.MediaSessionID})
+	}
+}
+
+func (m *Media) Stop() {
+	if m.currentStatus != nil {
+		m.Send(&MediaCommand{commandMediaStop, m.currentStatus.MediaSessionID})
+	}
 }
 
 var getMediaStatus = responses.Headers{Type: "GET_STATUS"}
@@ -104,78 +119,16 @@ type MediaStatus struct {
 	IdleReason             string                 `json:"idleReason"`
 }
 
-// launch app:
-/*
-func (c *Client) launchMediaApp(ctx context.Context) (string, error) {
-	// get transport id
-	status, err := c.receiver.GetStatus(ctx)
-	if err != nil {
-		return "", err
-	}
-	app := status.GetSessionByAppId(AppMedia)
-	if app == nil {
-		// needs launching
-		status, err = c.receiver.LaunchApp(ctx, AppMedia)
-		if err != nil {
-			return "", err
-		}
-		app = status.GetSessionByAppId(AppMedia)
-	}
-
-	if app == nil {
-		return "", errors.New("Failed to get media transport")
-	}
-	return *app.TransportId, nil
-}
-func (c *MediaController) LoadMedia(ctx context.Context, media MediaItem, currentTime int, autoplay bool, customData interface{}) (*api.CastMessage, error) {
-	message, err := c.channel.Request(ctx, &LoadMediaCommand{
-		PayloadHeaders: commandMediaLoad,
-		Media:          media,
-		CurrentTime:    currentTime,
-		Autoplay:       autoplay,
-		CustomData:     customData,
+func (c *Media) LoadMedia(media MediaItem, currentTime int, autoplay bool, customData interface{}) error {
+	_, err := c.Request(&LoadMediaCommand{
+		Headers:     commandMediaLoad,
+		Media:       media,
+		CurrentTime: currentTime,
+		Autoplay:    autoplay,
+		CustomData:  customData,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("Failed to send load command: %s", err)
+		return fmt.Errorf("Failed to send load command: %s", err)
 	}
-
-	response := &net.PayloadHeaders{}
-	err = json.Unmarshal([]byte(*message.PayloadUtf8), response)
-	if err != nil {
-		return nil, err
-	}
-	if response.Type == "LOAD_FAILED" {
-		return nil, errors.New("Load media failed")
-	}
-
-	return message, nil
+	return nil
 }
-
-func (c *MediaController) Play(ctx context.Context) (*api.CastMessage, error) {
-	message, err := c.channel.Request(ctx, &MediaCommand{commandMediaPlay, c.MediaSessionID})
-	if err != nil {
-		return nil, fmt.Errorf("Failed to send play command: %s", err)
-	}
-	return message, nil
-}
-
-func (c *MediaController) Pause(ctx context.Context) (*api.CastMessage, error) {
-	message, err := c.channel.Request(ctx, &MediaCommand{commandMediaPause, c.MediaSessionID})
-	if err != nil {
-		return nil, fmt.Errorf("Failed to send pause command: %s", err)
-	}
-	return message, nil
-}
-
-func (c *MediaController) Stop(ctx context.Context) (*api.CastMessage, error) {
-	if c.MediaSessionID == 0 {
-		// no current session to stop
-		return nil, nil
-	}
-	message, err := c.channel.Request(ctx, &MediaCommand{commandMediaStop, c.MediaSessionID})
-	if err != nil {
-		return nil, fmt.Errorf("Failed to send stop command: %s", err)
-	}
-	return message, nil
-}
-*/

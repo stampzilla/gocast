@@ -1,10 +1,7 @@
 package events
 
+import "github.com/stampzilla/gocast/responses"
+
 type AppStopped struct {
-	AppID       string      `json:"appId,omitempty"`
-	DisplayName string      `json:"displayName,omitempty"`
-	Namespaces  []Namespace `json:"namespaces"`
-	SessionID   string      `json:"sessionId,omitempty"`
-	StatusText  string      `json:"statusText,omitempty"`
-	TransportId string      `json:"transportId,omitempty"`
+	*responses.ApplicationSession
 }

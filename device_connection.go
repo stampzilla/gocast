@@ -79,7 +79,7 @@ func (d *Device) Connect() error {
 
 	d.Subscribe("urn:x-cast:com.google.cast.tp.connection", "receiver-0", d.connectionHandler)
 	d.Subscribe("urn:x-cast:com.google.cast.tp.heartbeat", "receiver-0", d.heartbeatHandler)
-	d.Subscribe("urn:x-cast:com.google.cast.receiver", "receiver-0", d.receiverHandler)
+	d.Subscribe("urn:x-cast:com.google.cast.receiver", "receiver-0", d.ReceiverHandler)
 
 	return nil
 }
@@ -89,14 +89,7 @@ func (d *Device) Disconnect() {
 	d.conn = nil
 }
 
-func (d *Device) Send(urn, sourceId, destinationId string, payload interface{}) error {
-	if p, ok := payload.(responses.Headers); ok {
-		d.id++
-		p.RequestId = &d.id
-
-		payload = p
-	}
-
+func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Payload) error {
 	payloadJson, err := json.Marshal(payload)
 	if err != nil {
 		fmt.Println("Failed to json.Marshal: ", err)

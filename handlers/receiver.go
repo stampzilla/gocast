@@ -9,26 +9,15 @@ import (
 )
 
 type Receiver struct {
-	Dispatch func(events.Event)
-	send     func(interface{}) error
+	baseHandler
 
 	knownApplications map[string]responses.ApplicationSession
-}
-
-func (r *Receiver) RegisterDispatch(dispatch func(events.Event)) {
-	r.Dispatch = dispatch
-}
-func (r *Receiver) RegisterSend(send func(interface{}) error) {
-	r.send = send
-}
-
-func (r *Receiver) Send(p interface{}) error {
-	return r.send(p)
+	status            *responses.ReceiverStatus
 }
 
 func (r *Receiver) Connect() {
 	// Request a new status update
-	r.Send(responses.Headers{Type: "GET_STATUS"})
+	r.Send(&responses.Headers{Type: "GET_STATUS"})
 }
 
 func (r *Receiver) Disconnect() {
@@ -67,25 +56,52 @@ func (r *Receiver) Unmarshal(message string) {
 		// New app, add it to the list
 		r.knownApplications[app.AppID] = *app
 
-		r.Dispatch(events.AppStarted{
-			AppID:       app.AppID,
-			DisplayName: app.DisplayName,
-			TransportId: app.TransportId,
-		})
+		r.Dispatch(events.AppStarted{app})
+		//AppID:       app.AppID,
+		//DisplayName: app.DisplayName,
+		//TransportId: app.TransportId,
+		//})
 	}
 
 	// Loop thru all stopped apps
 	for key, app := range prev {
 		delete(r.knownApplications, key)
 
-		r.Dispatch(events.AppStopped{
-			AppID:       app.AppID,
-			DisplayName: app.DisplayName,
-			TransportId: app.TransportId,
-		})
+		r.Dispatch(events.AppStopped{&app})
+		//AppID:       app.AppID,
+		//DisplayName: app.DisplayName,
+		//TransportId: app.TransportId,
+		//})
 	}
 
 	r.Dispatch(events.ReceiverStatus{
 		Status: response.Status,
 	})
+	r.status = response.Status
+}
+func (r *Receiver) GetSessionByAppId(appId string) *responses.ApplicationSession {
+	for _, app := range r.knownApplications {
+		if app.AppID == appId {
+			return &app
+		}
+	}
+	return nil
+}
+
+type LaunchRequest struct {
+	responses.Headers
+	AppId string `json:"appId"`
+}
+
+func (r *Receiver) LaunchApp(appId string) error {
+	//already launched?
+	if app := r.GetSessionByAppId(appId); app != nil {
+		return nil
+	}
+
+	_, err := r.Request(&LaunchRequest{
+		Headers: responses.Headers{Type: "LAUNCH"},
+		AppId:   appId,
+	})
+	return err
 }

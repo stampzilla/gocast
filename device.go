@@ -4,6 +4,7 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
 	"github.com/stampzilla/gocast/handlers"
 )
@@ -15,14 +16,13 @@ type Device struct {
 	port    int
 	conn    net.Conn
 	wrapper *packetStream
-	id      int
 
 	eventListners []func(event events.Event)
 	subscriptions []*Subscription
 
 	connectionHandler Handler
 	heartbeatHandler  Handler
-	receiverHandler   Handler
+	ReceiverHandler   *handlers.Receiver
 }
 
 func NewDevice() *Device {
@@ -31,7 +31,7 @@ func NewDevice() *Device {
 
 		connectionHandler: &handlers.Connection{},
 		heartbeatHandler:  &handlers.Heartbeat{},
-		receiverHandler:   &handlers.Receiver{},
+		ReceiverHandler:   &handlers.Receiver{},
 	}
 }
 
@@ -75,6 +75,7 @@ func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 		DestinationId: destinationId,
 		Handler:       handler,
 		Device:        d,
+		inFlight:      make(map[int]chan *api.CastMessage),
 	}
 
 	//log.Println("Subscribing to ", urn, " --- ", destinationId)
@@ -86,6 +87,7 @@ func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 	d.subscriptions = append(d.subscriptions, s)
 
 	handler.RegisterSend(s.Send)
+	handler.RegisterRequest(s.Request)
 	handler.RegisterDispatch(d.Dispatch)
 	handler.Connect()
 }

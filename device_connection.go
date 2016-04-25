@@ -105,7 +105,7 @@ func (d *Device) Disconnect() {
 		subscription.Handler.Disconnect()
 	}
 
-	d.subscriptions = make([]*Subscription, 0)
+	d.subscriptions = make(map[string]*Subscription, 0)
 	d.Dispatch(events.Disconnected{})
 
 	d.conn.Close()

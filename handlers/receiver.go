@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
 	"github.com/stampzilla/gocast/responses"
 )
@@ -104,4 +105,14 @@ func (r *Receiver) LaunchApp(appId string) error {
 		AppId:   appId,
 	})
 	return err
+}
+
+//TODO maybe do 0-100 instead of 0.0 to 1.0?
+func (r *Receiver) SetVolume(volume float64) (*api.CastMessage, error) {
+	return r.Request(&responses.ReceiverStatus{
+		Headers: responses.Headers{Type: "SET_VOLUME"},
+		Volume: &responses.Volume{
+			Level: volume,
+		},
+	})
 }

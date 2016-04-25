@@ -1,6 +1,7 @@
 package gocast
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -17,6 +18,12 @@ type Subscription struct {
 	Device        *Device
 	requestId     int64
 	inFlight      map[int]chan *api.CastMessage
+}
+
+func (s *Subscription) Sha256() string {
+	data := s.Urn + s.SourceId + s.DestinationId
+	sum := sha256.Sum256([]byte(data))
+	return string(sum[:])
 }
 
 func (s *Subscription) Send(payload responses.Payload) error {

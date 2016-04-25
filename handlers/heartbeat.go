@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/stampzilla/gocast/responses"
@@ -48,7 +47,7 @@ func (h *Heartbeat) Disconnect() {
 }
 
 func (h *Heartbeat) Unmarshal(message string) {
-	fmt.Println("Heartbeat received: ", message)
+	//fmt.Println("Heartbeat received: ", message)
 }
 
 func (h *Heartbeat) Ping() {

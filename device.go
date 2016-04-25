@@ -19,7 +19,7 @@ type Device struct {
 	reconnect chan struct{}
 
 	eventListners []func(event events.Event)
-	subscriptions []*Subscription
+	subscriptions map[string]*Subscription
 
 	connectionHandler Handler
 	heartbeatHandler  Handler
@@ -30,6 +30,7 @@ func NewDevice() *Device {
 	return &Device{
 		eventListners:     make([]func(event events.Event), 0),
 		reconnect:         make(chan struct{}),
+		subscriptions:     make(map[string]*Subscription),
 		connectionHandler: &handlers.Connection{},
 		heartbeatHandler:  &handlers.Heartbeat{},
 		ReceiverHandler:   &handlers.Receiver{},
@@ -68,7 +69,6 @@ func (d *Device) String() string {
 
 func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 	sourceId := "sender-0"
-	//destinationId := "receiver-0"
 
 	s := &Subscription{
 		Urn:           urn,
@@ -85,10 +85,33 @@ func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 	//return d.Send(urn, sourceId, destinationId, payload)
 	//}
 
-	d.subscriptions = append(d.subscriptions, s)
+	d.subscriptions[s.Sha256()] = s
 
 	handler.RegisterSend(s.Send)
 	handler.RegisterRequest(s.Request)
 	handler.RegisterDispatch(d.Dispatch)
 	handler.Connect()
+}
+
+func (d *Device) UnsubscribeByUrn(urn string) {
+	subs := []string{}
+	for k, s := range d.subscriptions {
+		if s.Urn == urn {
+			subs = append(subs, k)
+		}
+	}
+	for _, sub := range subs {
+		delete(d.subscriptions, sub)
+	}
+}
+func (d *Device) UnsubscribeByUrnAndDestinationId(urn, destinationId string) {
+	subs := []string{}
+	for k, s := range d.subscriptions {
+		if s.Urn == urn && s.DestinationId == destinationId {
+			subs = append(subs, k)
+		}
+	}
+	for _, sub := range subs {
+		delete(d.subscriptions, sub)
+	}
 }

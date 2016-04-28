@@ -18,7 +18,7 @@ func (d *Device) reader() {
 	for {
 		packet, err := d.wrapper.Read()
 
-		if err != nil && packet == nil {
+		if err != nil {
 			log.Println(err)
 			d.Disconnect()
 			d.reconnect <- struct{}{}

@@ -3,6 +3,7 @@ package gocast
 import (
 	"net"
 	"strconv"
+	"sync"
 
 	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
@@ -10,6 +11,7 @@ import (
 )
 
 type Device struct {
+	sync.RWMutex
 	name      string
 	uuid      string
 	ip        net.IP
@@ -85,7 +87,9 @@ func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 	//return d.Send(urn, sourceId, destinationId, payload)
 	//}
 
+	d.Lock()
 	d.subscriptions[s.Sha256()] = s
+	d.Unlock()
 
 	handler.RegisterSend(s.Send)
 	handler.RegisterRequest(s.Request)
@@ -95,22 +99,30 @@ func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 
 func (d *Device) UnsubscribeByUrn(urn string) {
 	subs := []string{}
+	d.RLock()
 	for k, s := range d.subscriptions {
 		if s.Urn == urn {
 			subs = append(subs, k)
 		}
 	}
+	d.RUnlock()
+	d.Lock()
+	defer d.Unlock()
 	for _, sub := range subs {
 		delete(d.subscriptions, sub)
 	}
 }
 func (d *Device) UnsubscribeByUrnAndDestinationId(urn, destinationId string) {
 	subs := []string{}
+	d.RLock()
 	for k, s := range d.subscriptions {
 		if s.Urn == urn && s.DestinationId == destinationId {
 			subs = append(subs, k)
 		}
 	}
+	d.RUnlock()
+	d.Lock()
+	defer d.Unlock()
 	for _, sub := range subs {
 		delete(d.subscriptions, sub)
 	}

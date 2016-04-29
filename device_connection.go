@@ -44,11 +44,13 @@ func (d *Device) reader() {
 		}
 
 		catched := false
+		d.RLock()
 		for _, subscription := range d.subscriptions {
 			if subscription.Receive(message, &headers) {
 				catched = true
 			}
 		}
+		d.RUnlock()
 
 		if !catched {
 			fmt.Println("LOST MESSAGE:")
@@ -101,11 +103,15 @@ func (d *Device) connect() error {
 }
 
 func (d *Device) Disconnect() {
+	d.RLock()
 	for _, subscription := range d.subscriptions {
 		subscription.Handler.Disconnect()
 	}
+	d.RUnlock()
 
+	d.Lock()
 	d.subscriptions = make(map[string]*Subscription, 0)
+	d.Unlock()
 	d.Dispatch(events.Disconnected{})
 
 	d.conn.Close()

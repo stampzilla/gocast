@@ -19,7 +19,7 @@ func (d *Device) reader() {
 		packet, err := d.wrapper.Read()
 
 		if err != nil {
-			log.Println(err)
+			log.Println("Error reading from chromecast:", err)
 			d.Disconnect()
 			d.reconnect <- struct{}{}
 			return

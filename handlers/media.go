@@ -66,12 +66,19 @@ func (m *Media) Stop() {
 	}
 }
 
+func (m *Media) Seek(currentTime int) {
+    if m.currentStatus != nil {
+        m.Send(&SeekMediaCommand{commandMediaSeek, currentTime, m.currentStatus.MediaSessionID})
+    }
+}
+
 var getMediaStatus = responses.Headers{Type: "GET_STATUS"}
 
 var commandMediaPlay = responses.Headers{Type: "PLAY"}
 var commandMediaPause = responses.Headers{Type: "PAUSE"}
 var commandMediaStop = responses.Headers{Type: "STOP"}
 var commandMediaLoad = responses.Headers{Type: "LOAD"}
+var commandMediaSeek = responses.Headers{Type: "SEEK"}
 
 //TODO move to responses package
 type MediaCommand struct {
@@ -117,6 +124,12 @@ type MediaStatus struct {
 	CustomData             map[string]interface{} `json:"customData"`
 	RepeatMode             string                 `json:"repeatMode"`
 	IdleReason             string                 `json:"idleReason"`
+}
+
+type SeekMediaCommand struct {
+    responses.Headers
+    CurrentTime int `json:"currentTime"`
+    MediaSessionID int `json:"mediaSessionId"`
 }
 
 func (c *Media) LoadMedia(media MediaItem, currentTime int, autoplay bool, customData interface{}) error {

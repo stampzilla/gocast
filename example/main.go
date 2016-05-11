@@ -39,6 +39,9 @@ func discoveryListner(discovery *discovery.Service) {
 				fmt.Println(device.Name(), "- Connected, weeihoo")
 			case events.Disconnected:
 				fmt.Println(device.Name(), "- Disconnected, bah :/")
+
+				// Try to reconnect again
+				device.Connect()
 			case events.AppStarted:
 				fmt.Println(device.Name(), "- App started:", data.DisplayName, "(", data.AppID, ")")
 			case events.AppStopped:
@@ -53,7 +56,7 @@ func discoveryListner(discovery *discovery.Service) {
 		device.Connect()
 
 		go func() {
-			<-time.After(time.Millisecond * 2)
+			<-time.After(time.Second * 10)
 			device.Disconnect()
 		}()
 	}

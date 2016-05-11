@@ -5,48 +5,52 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
-	"github.com/stampzilla/gocast/handlers"
+	"github.com/stampzilla/gocast/responses"
 )
 
 func (d *Device) reader() {
 	for {
-		packet := d.wrapper.Read()
+		packet, err := d.wrapper.Read()
 
-		if packet == nil {
-			fmt.Println("\ndisconnected...")
-			for _, subscription := range d.subscriptions {
-				subscription.Handler.Disconnect()
-			}
+		if err != nil {
+			log.Println("Error reading from chromecast error:", err, "Packet:", packet )
+			d.Disconnect()
+			d.reconnect <- struct{}{}
 			return
 		}
 
 		message := &api.CastMessage{}
-		err := proto.Unmarshal(*packet, message)
+		err = proto.Unmarshal(*packet, message)
 		if err != nil {
 			log.Fatalf("Failed to unmarshal CastMessage: %s", err)
+			continue
 		}
 
 		//spew.Dump("Message!", message)
 
-		var headers handlers.Headers
+		var headers responses.Headers
 
 		err = json.Unmarshal([]byte(*message.PayloadUtf8), &headers)
 
 		if err != nil {
 			log.Fatalf("Failed to unmarshal message: %s", err)
+			continue
 		}
 
 		catched := false
+		d.RLock()
 		for _, subscription := range d.subscriptions {
 			if subscription.Receive(message, &headers) {
 				catched = true
 			}
 		}
+		d.RUnlock()
 
 		if !catched {
 			fmt.Println("LOST MESSAGE:")
@@ -56,9 +60,24 @@ func (d *Device) reader() {
 }
 
 func (d *Device) Connect() error {
-	event := events.Connected{}
-	d.Dispatch(event)
-
+	err := d.connect()
+	if err != nil {
+		return err
+	}
+	go d.reconnector()
+	return nil
+}
+func (d *Device) reconnector() {
+	for {
+		select {
+		case <-d.reconnect:
+			log.Println("Reconnect signal received")
+			time.Sleep(time.Second * 10)
+			d.connect()
+		}
+	}
+}
+func (d *Device) connect() error {
 	//log.Printf("connecting to %s:%d ...", d.ip, d.port)
 
 	var err error
@@ -70,29 +89,36 @@ func (d *Device) Connect() error {
 		return fmt.Errorf("Failed to connect to Chromecast. Error:%s", err)
 	}
 
+	event := events.Connected{}
+	d.Dispatch(event)
+
 	d.wrapper = NewPacketStream(d.conn)
 	go d.reader()
 
-	d.Subscribe("urn:x-cast:com.google.cast.tp.connection", d.connectionHandler)
-	d.Subscribe("urn:x-cast:com.google.cast.tp.heartbeat", d.heartbeatHandler)
-	d.Subscribe("urn:x-cast:com.google.cast.receiver", d.receiverHandler)
+	d.Subscribe("urn:x-cast:com.google.cast.tp.connection", "receiver-0", d.connectionHandler)
+	d.Subscribe("urn:x-cast:com.google.cast.tp.heartbeat", "receiver-0", d.heartbeatHandler)
+	d.Subscribe("urn:x-cast:com.google.cast.receiver", "receiver-0", d.ReceiverHandler)
 
 	return nil
 }
 
 func (d *Device) Disconnect() {
+	d.RLock()
+	for _, subscription := range d.subscriptions {
+		subscription.Handler.Disconnect()
+	}
+	d.RUnlock()
+
+	d.Lock()
+	d.subscriptions = make(map[string]*Subscription, 0)
+	d.Unlock()
+	d.Dispatch(events.Disconnected{})
+
 	d.conn.Close()
 	d.conn = nil
 }
 
-func (d *Device) Send(urn, sourceId, destinationId string, payload interface{}) error {
-	if p, ok := payload.(handlers.Headers); ok {
-		d.id++
-		p.RequestId = &d.id
-
-		payload = p
-	}
-
+func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Payload) error {
 	payloadJson, err := json.Marshal(payload)
 	if err != nil {
 		fmt.Println("Failed to json.Marshal: ", err)

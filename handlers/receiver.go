@@ -4,44 +4,41 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
+	"github.com/stampzilla/gocast/responses"
 )
 
 type Receiver struct {
-	Dispatch func(events.Event)
-	Send     func(Headers) error
+	baseHandler
 
-	knownApplications map[string]ApplicationSession
-}
-
-func (r *Receiver) RegisterDispatch(dispatch func(events.Event)) {
-	r.Dispatch = dispatch
-}
-func (r *Receiver) RegisterSend(send func(Headers) error) {
-	r.Send = send
+	knownApplications map[string]responses.ApplicationSession
+	status            *responses.ReceiverStatus
 }
 
 func (r *Receiver) Connect() {
-	r.Send(Headers{Type: "GET_STATUS"})
+	// Request a new status update
+	r.Send(&responses.Headers{Type: "GET_STATUS"})
 }
 
 func (r *Receiver) Disconnect() {
+	r.knownApplications = make(map[string]responses.ApplicationSession, 0)
 }
 
 func (r *Receiver) Unmarshal(message string) {
 	fmt.Println("Receiver received: ", message)
 
-	response := &StatusResponse{}
+	response := &responses.ReceiverResponse{}
 	err := json.Unmarshal([]byte(message), response)
 
 	if err != nil {
-		fmt.Errorf("Failed to unmarshal status message:%s - %s", err, message)
+		fmt.Printf("Failed to unmarshal status message:%s - %s\n", err, message)
 		return
 	}
 
-	prev := make(map[string]ApplicationSession, 0)
+	prev := make(map[string]responses.ApplicationSession, 0)
 	if r.knownApplications == nil {
-		r.knownApplications = make(map[string]ApplicationSession, 0)
+		r.knownApplications = make(map[string]responses.ApplicationSession, 0)
 	}
 
 	// Make a copy of known applications
@@ -60,48 +57,62 @@ func (r *Receiver) Unmarshal(message string) {
 		// New app, add it to the list
 		r.knownApplications[app.AppID] = *app
 
-		r.Dispatch(events.AppStarted{
-			AppID:       app.AppID,
-			DisplayName: app.DisplayName,
-		})
+		r.Dispatch(events.AppStarted{app})
+		//AppID:       app.AppID,
+		//DisplayName: app.DisplayName,
+		//TransportId: app.TransportId,
+		//})
 	}
 
 	// Loop thru all stopped apps
 	for key, app := range prev {
 		delete(r.knownApplications, key)
 
-		r.Dispatch(events.AppStopped{
-			AppID:       app.AppID,
-			DisplayName: app.DisplayName,
-		})
+		r.Dispatch(events.AppStopped{&app})
+		//AppID:       app.AppID,
+		//DisplayName: app.DisplayName,
+		//TransportId: app.TransportId,
+		//})
 	}
+
+	r.Dispatch(events.ReceiverStatus{
+		Status: response.Status,
+	})
+	r.status = response.Status
+}
+func (r *Receiver) GetSessionByAppId(appId string) *responses.ApplicationSession {
+	for _, app := range r.knownApplications {
+		if app.AppID == appId {
+			return &app
+		}
+	}
+	return nil
 }
 
-type StatusResponse struct {
-	Headers
-	Status *ReceiverStatus `json:"status,omitempty"`
+type LaunchRequest struct {
+	responses.Headers
+	AppId string `json:"appId"`
 }
 
-type ReceiverStatus struct {
-	Headers
-	Applications []*ApplicationSession `json:"applications"`
-	Volume       *Volume               `json:"volume,omitempty"`
+func (r *Receiver) LaunchApp(appId string) error {
+	//already launched?
+	if app := r.GetSessionByAppId(appId); app != nil {
+		return nil
+	}
+
+	_, err := r.Request(&LaunchRequest{
+		Headers: responses.Headers{Type: "LAUNCH"},
+		AppId:   appId,
+	})
+	return err
 }
 
-type ApplicationSession struct {
-	AppID       string      `json:"appId,omitempty"`
-	DisplayName string      `json:"displayName,omitempty"`
-	Namespaces  []Namespace `json:"namespaces"`
-	SessionID   string      `json:"sessionId,omitempty"`
-	StatusText  string      `json:"statusText,omitempty"`
-	TransportId string      `json:"transportId,omitempty"`
-}
-
-type Namespace struct {
-	Name string `json:"name"`
-}
-
-type Volume struct {
-	Level *float64 `json:"level,omitempty"`
-	Muted *bool    `json:"muted,omitempty"`
+//TODO maybe do 0-100 instead of 0.0 to 1.0?
+func (r *Receiver) SetVolume(volume float64) (*api.CastMessage, error) {
+	return r.Request(&responses.ReceiverStatus{
+		Headers: responses.Headers{Type: "SET_VOLUME"},
+		Volume: &responses.Volume{
+			Level: volume,
+		},
+	})
 }

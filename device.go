@@ -81,12 +81,6 @@ func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 		inFlight:      make(map[int]chan *api.CastMessage),
 	}
 
-	//log.Println("Subscribing to ", urn, " --- ", destinationId)
-
-	//callback := func(payload handlers.Headers) error {
-	//return d.Send(urn, sourceId, destinationId, payload)
-	//}
-
 	d.Lock()
 	d.subscriptions[s.Sha256()] = s
 	d.Unlock()
@@ -95,6 +89,9 @@ func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 	handler.RegisterRequest(s.Request)
 	handler.RegisterDispatch(d.Dispatch)
 	handler.Connect()
+
+	//log.Println("Subscribing to ", urn, " --- ", destinationId)
+
 }
 
 func (d *Device) UnsubscribeByUrn(urn string) {
@@ -117,6 +114,7 @@ func (d *Device) UnsubscribeByUrnAndDestinationId(urn, destinationId string) {
 	d.RLock()
 	for k, s := range d.subscriptions {
 		if s.Urn == urn && s.DestinationId == destinationId {
+			s.Handler.Disconnect()
 			subs = append(subs, k)
 		}
 	}

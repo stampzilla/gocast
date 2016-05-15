@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/responses"
 )
@@ -34,12 +35,14 @@ func (s *Subscription) Send(payload responses.Payload) error {
 
 // Request works like send, but waits for resposne to requestId before returning
 func (s *Subscription) Request(payload responses.Payload) (*api.CastMessage, error) {
-	response := make(chan *api.CastMessage)
 	requestId := int(atomic.AddInt64(&s.requestId, 1))
 	payload.SetRequestId(requestId)
+
+	response := make(chan *api.CastMessage)
 	s.inFlight[requestId] = response
 
-	err := s.Send(payload)
+	//err := s.Send(payload)
+	err := s.Device.Send(s.Urn, s.SourceId, s.DestinationId, payload)
 	if err != nil {
 		delete(s.inFlight, requestId)
 		return nil, err
@@ -48,19 +51,20 @@ func (s *Subscription) Request(payload responses.Payload) (*api.CastMessage, err
 	select {
 	case reply := <-response:
 		return reply, nil
-	case <-time.After(time.Second * 5):
+	case <-time.After(time.Second * 10):
 		delete(s.inFlight, requestId)
-		return nil, fmt.Errorf("Timeout sending")
+		return nil, fmt.Errorf("Timeout sending: %s", spew.Sdump(payload))
 	}
 }
 
 func (s *Subscription) Receive(message *api.CastMessage, headers *responses.Headers) bool {
 	// Just skip the message if it isnt to this subscription
 
-	//log.Println(message)
 	if *message.SourceId != s.DestinationId || (*message.DestinationId != s.SourceId && *message.DestinationId != "*") || *message.Namespace != s.Urn {
 		return false
 	}
+
+	s.Handler.Unmarshal(message.GetPayloadUtf8())
 
 	//if this is a request we must send the response back to the pending request
 	if headers.RequestId != nil && *headers.RequestId != 0 {
@@ -70,6 +74,5 @@ func (s *Subscription) Receive(message *api.CastMessage, headers *responses.Head
 		}
 	}
 
-	s.Handler.Unmarshal(message.GetPayloadUtf8())
 	return true
 }

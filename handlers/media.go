@@ -35,9 +35,6 @@ func (m *Media) Unmarshal(message string) {
 		fmt.Printf("Failed to unmarshal status message:%s - %s\n", err, message)
 		return
 	}
-	//for _, status := range response.Status {
-	//m.mediaSessionId = status.MediaSessionID
-	//}
 
 	//log.Println("MEDIA SESSION ID: ", response.MediaSessionID)
 	if len(response.Status) > 0 {
@@ -50,26 +47,26 @@ func (m *Media) Unmarshal(message string) {
 }
 func (m *Media) Play() {
 	if m.currentStatus != nil {
-		m.Send(&MediaCommand{commandMediaPlay, m.currentStatus.MediaSessionID})
+		m.Request(&MediaCommand{commandMediaPlay, m.currentStatus.MediaSessionID})
 	}
 }
 
 func (m *Media) Pause() {
 	if m.currentStatus != nil {
-		m.Send(&MediaCommand{commandMediaPause, m.currentStatus.MediaSessionID})
+		m.Request(&MediaCommand{commandMediaPause, m.currentStatus.MediaSessionID})
 	}
 }
 
 func (m *Media) Stop() {
 	if m.currentStatus != nil {
-		m.Send(&MediaCommand{commandMediaStop, m.currentStatus.MediaSessionID})
+		m.Request(&MediaCommand{commandMediaStop, m.currentStatus.MediaSessionID})
 	}
 }
 
 func (m *Media) Seek(currentTime int) {
-    if m.currentStatus != nil {
-        m.Send(&SeekMediaCommand{commandMediaSeek, currentTime, m.currentStatus.MediaSessionID})
-    }
+	if m.currentStatus != nil {
+		m.Request(&SeekMediaCommand{commandMediaSeek, currentTime, m.currentStatus.MediaSessionID})
+	}
 }
 
 var getMediaStatus = responses.Headers{Type: "GET_STATUS"}
@@ -127,9 +124,9 @@ type MediaStatus struct {
 }
 
 type SeekMediaCommand struct {
-    responses.Headers
-    CurrentTime int `json:"currentTime"`
-    MediaSessionID int `json:"mediaSessionId"`
+	responses.Headers
+	CurrentTime    int `json:"currentTime"`
+	MediaSessionID int `json:"mediaSessionId"`
 }
 
 func (c *Media) LoadMedia(media MediaItem, currentTime int, autoplay bool, customData interface{}) error {

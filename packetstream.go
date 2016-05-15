@@ -34,10 +34,12 @@ func (w *packetStream) readPackets() {
 
 			err := binary.Read(w.stream, binary.BigEndian, &length)
 			if err != nil {
-				//fmt.Printf("Failed binary.Read packet: %s", err)
+				fmt.Printf("Failed binary.Read packet: %s", err)
 				w.packets <- packetContainer{err: err, payload: nil}
 				return
 			}
+
+			//TODO make sure this goroutine is killed on disconnect
 
 			if length > 0 {
 				packet := make([]byte, length)
@@ -71,14 +73,14 @@ func (w *packetStream) Read() (*[]byte, error) {
 	return pkt.payload, pkt.err
 }
 
-func (w *packetStream) Write(data *[]byte) (int, error) {
+func (w *packetStream) Write(data []byte) (int, error) {
 
-	err := binary.Write(w.stream, binary.BigEndian, uint32(len(*data)))
+	err := binary.Write(w.stream, binary.BigEndian, uint32(len(data)))
 
 	if err != nil {
-		err = fmt.Errorf("Failed to write packet length %d. error:%s\n", len(*data), err)
+		err = fmt.Errorf("Failed to write packet length %d. error:%s\n", len(data), err)
 		return 0, err
 	}
 
-	return w.stream.Write(*data)
+	return w.stream.Write(data)
 }

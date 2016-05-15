@@ -94,10 +94,12 @@ type LaunchRequest struct {
 	AppId string `json:"appId"`
 }
 
+var ErrAppAlreadyLaunched = fmt.Errorf("App already launched")
+
 func (r *Receiver) LaunchApp(appId string) error {
 	//already launched?
 	if app := r.GetSessionByAppId(appId); app != nil {
-		return nil
+		return ErrAppAlreadyLaunched
 	}
 
 	_, err := r.Request(&LaunchRequest{

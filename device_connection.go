@@ -19,7 +19,7 @@ func (d *Device) reader() {
 		packet, err := d.wrapper.Read()
 
 		if err != nil {
-			log.Println("Error reading from chromecast error:", err, "Packet:", packet )
+			log.Println("Error reading from chromecast error:", err, "Packet:", packet)
 			d.Disconnect()
 			d.reconnect <- struct{}{}
 			return
@@ -34,9 +34,9 @@ func (d *Device) reader() {
 
 		//spew.Dump("Message!", message)
 
-		var headers responses.Headers
+		headers := &responses.Headers{}
 
-		err = json.Unmarshal([]byte(*message.PayloadUtf8), &headers)
+		err = json.Unmarshal([]byte(*message.PayloadUtf8), headers)
 
 		if err != nil {
 			log.Fatalf("Failed to unmarshal message: %s", err)
@@ -46,14 +46,14 @@ func (d *Device) reader() {
 		catched := false
 		d.RLock()
 		for _, subscription := range d.subscriptions {
-			if subscription.Receive(message, &headers) {
+			if subscription.Receive(message, headers) {
 				catched = true
 			}
 		}
 		d.RUnlock()
 
 		if !catched {
-			fmt.Println("LOST MESSAGE:")
+			log.Println("LOST MESSAGE:")
 			spew.Dump(message)
 		}
 	}
@@ -72,13 +72,17 @@ func (d *Device) reconnector() {
 		select {
 		case <-d.reconnect:
 			log.Println("Reconnect signal received")
-			time.Sleep(time.Second * 10)
+			time.Sleep(time.Second * 2)
 			d.connect()
 		}
 	}
 }
 func (d *Device) connect() error {
 	//log.Printf("connecting to %s:%d ...", d.ip, d.port)
+
+	if d.conn != nil {
+		return fmt.Errorf("Already connected to: %s (%s:%d)", d.Name(), d.Ip().String(), d.Port())
+	}
 
 	var err error
 	d.conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", d.ip, d.port), &tls.Config{
@@ -143,13 +147,14 @@ func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Pay
 		return err
 	}
 
-	//spew.Dump("Writing", message)
+	//log.Println("Writing:")
+	//spew.Dump(message)
 
 	if d.conn == nil {
 		return fmt.Errorf("We are disconnected, cannot send!")
 	}
 
-	_, err = d.wrapper.Write(&data)
+	_, err = d.wrapper.Write(data)
 
 	return err
 }

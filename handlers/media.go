@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/stampzilla/gocast/events"
 	"github.com/stampzilla/gocast/responses"
 )
 
 type Media struct {
 	baseHandler
-	currentStatus  *MediaStatus
+	currentStatus  *responses.MediaStatus
 	mediaSessionId int
 }
 
@@ -28,7 +29,7 @@ func (m *Media) Disconnect() {
 func (m *Media) Unmarshal(message string) {
 	log.Println("Media received: ", message)
 
-	response := &MediaStatusResponse{}
+	response := &responses.MediaStatusResponse{}
 	err := json.Unmarshal([]byte(message), response)
 
 	if err != nil {
@@ -39,33 +40,31 @@ func (m *Media) Unmarshal(message string) {
 	//log.Println("MEDIA SESSION ID: ", response.MediaSessionID)
 	if len(response.Status) > 0 {
 		m.currentStatus = response.Status[0]
+		m.Dispatch(events.Media{m.currentStatus})
 	}
 
-	//r.Dispatch(events.Media{
-	//Status: response.Status,
-	//})
 }
 func (m *Media) Play() {
 	if m.currentStatus != nil {
-		m.Request(&MediaCommand{commandMediaPlay, m.currentStatus.MediaSessionID})
+		m.Request(&responses.MediaCommand{commandMediaPlay, m.currentStatus.MediaSessionID})
 	}
 }
 
 func (m *Media) Pause() {
 	if m.currentStatus != nil {
-		m.Request(&MediaCommand{commandMediaPause, m.currentStatus.MediaSessionID})
+		m.Request(&responses.MediaCommand{commandMediaPause, m.currentStatus.MediaSessionID})
 	}
 }
 
 func (m *Media) Stop() {
 	if m.currentStatus != nil {
-		m.Request(&MediaCommand{commandMediaStop, m.currentStatus.MediaSessionID})
+		m.Request(&responses.MediaCommand{commandMediaStop, m.currentStatus.MediaSessionID})
 	}
 }
 
 func (m *Media) Seek(currentTime int) {
 	if m.currentStatus != nil {
-		m.Request(&SeekMediaCommand{commandMediaSeek, currentTime, m.currentStatus.MediaSessionID})
+		m.Request(&responses.SeekMediaCommand{commandMediaSeek, currentTime, m.currentStatus.MediaSessionID})
 	}
 }
 
@@ -77,60 +76,8 @@ var commandMediaStop = responses.Headers{Type: "STOP"}
 var commandMediaLoad = responses.Headers{Type: "LOAD"}
 var commandMediaSeek = responses.Headers{Type: "SEEK"}
 
-//TODO move to responses package
-type MediaCommand struct {
-	responses.Headers
-	MediaSessionID int `json:"mediaSessionId"`
-}
-
-type LoadMediaCommand struct {
-	responses.Headers
-	Media       MediaItem   `json:"media"`
-	CurrentTime int         `json:"currentTime"`
-	Autoplay    bool        `json:"autoplay"`
-	CustomData  interface{} `json:"customData"`
-}
-
-type MediaItem struct {
-	ContentId   string `json:"contentId"`
-	StreamType  string `json:"streamType"`
-	ContentType string `json:"contentType"`
-}
-
-type MediaStatusMedia struct {
-	ContentId   string  `json:"contentId"`
-	StreamType  string  `json:"streamType"`
-	ContentType string  `json:"contentType"`
-	Duration    float64 `json:"duration"`
-}
-
-type MediaStatusResponse struct {
-	responses.Headers
-	Status []*MediaStatus `json:"status,omitempty"`
-}
-
-type MediaStatus struct {
-	responses.Headers
-	MediaSessionID         int                    `json:"mediaSessionId"`
-	PlaybackRate           float64                `json:"playbackRate"`
-	PlayerState            string                 `json:"playerState"`
-	CurrentTime            float64                `json:"currentTime"`
-	SupportedMediaCommands int                    `json:"supportedMediaCommands"`
-	Volume                 *responses.Volume      `json:"volume,omitempty"`
-	Media                  *MediaStatusMedia      `json:"media"`
-	CustomData             map[string]interface{} `json:"customData"`
-	RepeatMode             string                 `json:"repeatMode"`
-	IdleReason             string                 `json:"idleReason"`
-}
-
-type SeekMediaCommand struct {
-	responses.Headers
-	CurrentTime    int `json:"currentTime"`
-	MediaSessionID int `json:"mediaSessionId"`
-}
-
-func (c *Media) LoadMedia(media MediaItem, currentTime int, autoplay bool, customData interface{}) error {
-	_, err := c.Request(&LoadMediaCommand{
+func (c *Media) LoadMedia(media responses.MediaItem, currentTime int, autoplay bool, customData interface{}) error {
+	_, err := c.Request(&responses.LoadMediaCommand{
 		Headers:     commandMediaLoad,
 		Media:       media,
 		CurrentTime: currentTime,

@@ -60,11 +60,11 @@ func (d *Device) reader() {
 }
 
 func (d *Device) Connect() error {
+	go d.reconnector()
 	err := d.connect()
 	if err != nil {
 		return err
 	}
-	go d.reconnector()
 	return nil
 }
 func (d *Device) reconnector() {
@@ -90,6 +90,7 @@ func (d *Device) connect() error {
 	})
 
 	if err != nil {
+		d.reconnect <- struct{}{}
 		return fmt.Errorf("Failed to connect to Chromecast. Error:%s", err)
 	}
 

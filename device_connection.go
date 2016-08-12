@@ -144,7 +144,9 @@ func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Pay
 		return err
 	}
 
-	log.Println("Writing:", spew.Sdump(message))
+	if message.Namspace != "urn:x-cast:com.google.cast.tp.heartbeat" {
+		log.Println("Writing:", spew.Sdump(message))
+	}
 
 	if d.conn == nil {
 		return fmt.Errorf("We are disconnected, cannot send!")

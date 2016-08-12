@@ -61,11 +61,7 @@ func (d *Device) reader() {
 
 func (d *Device) Connect() error {
 	go d.reconnector()
-	err := d.connect()
-	if err != nil {
-		return err
-	}
-	return nil
+	return d.connect()
 }
 func (d *Device) reconnector() {
 	for {
@@ -148,8 +144,7 @@ func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Pay
 		return err
 	}
 
-	//log.Println("Writing:")
-	//spew.Dump(message)
+	log.Println("Writing:", spew.Sdump(message))
 
 	if d.conn == nil {
 		return fmt.Errorf("We are disconnected, cannot send!")

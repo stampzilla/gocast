@@ -144,7 +144,7 @@ func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Pay
 		return err
 	}
 
-	if message.Namspace != "urn:x-cast:com.google.cast.tp.heartbeat" {
+	if *message.Namespace != "urn:x-cast:com.google.cast.tp.heartbeat" {
 		log.Println("Writing:", spew.Sdump(message))
 	}
 

@@ -14,16 +14,30 @@ type LoadMediaCommand struct {
 }
 
 type MediaItem struct {
-	ContentId   string `json:"contentId"`
-	StreamType  string `json:"streamType"`
-	ContentType string `json:"contentType"`
+	ContentId   string        `json:"contentId"`
+	StreamType  string        `json:"streamType"`
+	ContentType string        `json:"contentType"`
+	MetaData    MediaItemMeta `json:"metadata"`
+}
+
+type MediaItemMeta struct {
+	Title    string               `json:"title"`
+	SubTitle string               `json:"subtitle"`
+	Images   []MediaItemMetaImage `json:"images"`
+}
+
+type MediaItemMetaImage struct {
+	Url    string `json:"url"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
 }
 
 type MediaStatusMedia struct {
-	ContentId   string  `json:"contentId"`
-	StreamType  string  `json:"streamType"`
-	ContentType string  `json:"contentType"`
-	Duration    float64 `json:"duration"`
+	ContentId   string        `json:"contentId"`
+	StreamType  string        `json:"streamType"`
+	ContentType string        `json:"contentType"`
+	Duration    float64       `json:"duration"`
+	MetaData    MediaItemMeta `json:"metadata"`
 }
 
 type MediaStatusResponse struct {

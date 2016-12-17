@@ -99,12 +99,12 @@ func (d *Service) listner() {
 		}
 
 		device := gocast.NewDevice()
-		device.SetName(decodeDnsEntry(name[0]))
 		device.SetIp(entry.AddrV4)
 		device.SetPort(entry.Port)
 
 		info := decodeTxtRecord(entry.Info)
 		device.SetUuid(info["id"])
+		device.SetName(info["fn"])
 
 		d.foundDevices[key] = device
 

@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
@@ -26,13 +27,18 @@ func (r *Receiver) Disconnect() {
 }
 
 func (r *Receiver) Unmarshal(message string) {
-	fmt.Println("Receiver received: ", message)
+	log.Println("Receiver received: ", message)
 
 	response := &responses.ReceiverResponse{}
 	err := json.Unmarshal([]byte(message), response)
 
 	if err != nil {
-		fmt.Printf("Failed to unmarshal status message:%s - %s\n", err, message)
+		log.Printf("Failed to unmarshal status message:%s - %s\n", err, message)
+		return
+	}
+
+	if response.Type != responses.TypeStatus { //Probably an error like: {"reason":"CANCELLED","requestId":2,"type":"LAUNCH_ERROR"}
+		log.Println("Type RECEIVER_STATUS expected. Skipping.")
 		return
 	}
 

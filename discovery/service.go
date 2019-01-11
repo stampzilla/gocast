@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jonaz/mdns"
+	"github.com/micro/mdns"
 	"github.com/stampzilla/gocast"
 )
 

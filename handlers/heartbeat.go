@@ -7,9 +7,11 @@ import (
 )
 
 type Heartbeat struct {
+	OnFailure func()
 	baseHandler
-	ticker   *time.Ticker
-	shutdown chan struct{}
+	ticker         *time.Ticker
+	shutdown       chan struct{}
+	receivedAnswer chan struct{}
 }
 
 func (h *Heartbeat) Connect() {
@@ -23,17 +25,28 @@ func (h *Heartbeat) Connect() {
 
 	h.ticker = time.NewTicker(time.Second * 5)
 	h.shutdown = make(chan struct{})
+	h.receivedAnswer = make(chan struct{})
 	go func() {
 		for {
+			// Send out a ping
 			select {
 			case <-h.ticker.C:
 				h.Ping()
 			case <-h.shutdown:
 				return
 			}
+
+			// Wait for it to be received
+			select {
+			case <-time.After(time.Second * 10):
+				h.OnFailure()
+			case <-h.shutdown:
+				return
+			case <-h.receivedAnswer:
+				// everything great, carry on
+			}
 		}
 	}()
-
 }
 
 func (h *Heartbeat) Disconnect() {
@@ -47,7 +60,13 @@ func (h *Heartbeat) Disconnect() {
 }
 
 func (h *Heartbeat) Unmarshal(message string) {
-	//fmt.Println("Heartbeat received: ", message)
+	// fmt.Println("Heartbeat received: ", message)
+
+	// Try to notify our timeout montor
+	select {
+	case h.receivedAnswer <- struct{}{}:
+	case <-time.After(time.Second):
+	}
 }
 
 func (h *Heartbeat) Ping() {

@@ -49,14 +49,14 @@ func (d *Service) Periodic(interval time.Duration) error {
 	d.stopPeriodic = make(chan struct{})
 	go func() {
 		for {
+			mdns.Query(&mdns.QueryParam{
+				Service: "_googlecast._tcp",
+				Domain:  "local",
+				Timeout: time.Second * 1,
+				Entries: d.entriesCh,
+			})
 			select {
 			case <-ticker.C:
-				mdns.Query(&mdns.QueryParam{
-					Service: "_googlecast._tcp",
-					Domain:  "local",
-					Timeout: time.Second * 1,
-					Entries: d.entriesCh,
-				})
 			case <-d.stopPeriodic:
 				ticker.Stop()
 				d.foundDevices = make(map[string]*gocast.Device, 0)
@@ -91,10 +91,17 @@ func (d *Service) listner() {
 			continue
 		}
 
-		key := entry.AddrV4.String() + ":" + strconv.Itoa(entry.Port)
+		info := decodeTxtRecord(entry.Info)
+		key := info["id"] // Use device ID as key, allowes the device to change IP
 
-		// Skip allready found devices
-		if _, ok := d.foundDevices[key]; ok {
+		if dev, ok := d.foundDevices[key]; ok {
+			// If not connected, update address and reconnect
+			if !dev.Connected() {
+				dev.SetIp(entry.AddrV4)
+				dev.SetPort(entry.Port)
+				dev.Reconnect()
+			}
+			// Skip already connected devices
 			continue
 		}
 
@@ -102,8 +109,7 @@ func (d *Service) listner() {
 		device.SetIp(entry.AddrV4)
 		device.SetPort(entry.Port)
 
-		info := decodeTxtRecord(entry.Info)
-		device.SetUuid(info["id"])
+		device.SetUuid(key)
 		device.SetName(info["fn"])
 
 		d.foundDevices[key] = device
@@ -139,7 +145,11 @@ func decodeTxtRecord(txt string) map[string]string {
 	for _, v := range s {
 		s := strings.Split(v, "=")
 		if len(s) == 2 {
-			m[s[0]] = s[1]
+			if s[0] == "fn" { // Friendly name
+				m[s[0]] = decodeDnsEntry(s[1])
+			} else {
+				m[s[0]] = s[1]
+			}
 		}
 	}
 

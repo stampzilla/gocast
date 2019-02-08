@@ -21,7 +21,7 @@ func (d *Device) reader() {
 		if err != nil {
 			log.Println("Error reading from chromecast error:", err, "Packet:", packet)
 			d.Disconnect()
-			d.reconnect <- struct{}{}
+			//d.reconnect <- struct{}{}
 			return
 		}
 
@@ -59,9 +59,20 @@ func (d *Device) reader() {
 	}
 }
 
+func (d *Device) Connected() bool {
+	d.RLock()
+	defer d.RUnlock()
+	return d.connected
+}
 func (d *Device) Connect() error {
 	go d.reconnector()
 	return d.connect()
+}
+func (d *Device) Reconnect() {
+	select {
+	case d.reconnect <- struct{}{}:
+	default:
+	}
 }
 func (d *Device) reconnector() {
 	for {
@@ -74,7 +85,7 @@ func (d *Device) reconnector() {
 	}
 }
 func (d *Device) connect() error {
-	//log.Printf("connecting to %s:%d ...", d.ip, d.port)
+	log.Printf("connecting to %s:%d ...", d.ip, d.port)
 
 	if d.conn != nil {
 		return fmt.Errorf("Already connected to: %s (%s:%d)", d.Name(), d.Ip().String(), d.Port())
@@ -86,9 +97,13 @@ func (d *Device) connect() error {
 	})
 
 	if err != nil {
-		d.reconnect <- struct{}{}
+		//d.reconnect <- struct{}{}
 		return fmt.Errorf("Failed to connect to Chromecast. Error:%s", err)
 	}
+
+	d.Lock()
+	d.connected = true
+	d.Unlock()
 
 	event := events.Connected{}
 	d.Dispatch(event)
@@ -104,19 +119,25 @@ func (d *Device) connect() error {
 }
 
 func (d *Device) Disconnect() {
-	d.RLock()
-	for _, subscription := range d.subscriptions {
-		subscription.Handler.Disconnect()
+	if d.conn != nil {
+		d.RLock()
+		for _, subscription := range d.subscriptions {
+			subscription.Handler.Disconnect()
+		}
+		d.RUnlock()
+
+		d.Lock()
+		d.subscriptions = make(map[string]*Subscription, 0)
+		d.Unlock()
+		d.Dispatch(events.Disconnected{})
+
+		d.conn.Close()
+		d.conn = nil
 	}
-	d.RUnlock()
 
 	d.Lock()
-	d.subscriptions = make(map[string]*Subscription, 0)
+	d.connected = false
 	d.Unlock()
-	d.Dispatch(events.Disconnected{})
-
-	d.conn.Close()
-	d.conn = nil
 }
 
 func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Payload) error {

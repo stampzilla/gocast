@@ -17,6 +17,7 @@ type Device struct {
 	uuid      string
 	ip        net.IP
 	port      int
+	connected bool
 	conn      net.Conn
 	wrapper   *packetStream
 	reconnect chan struct{}
@@ -25,12 +26,12 @@ type Device struct {
 	subscriptions map[string]*Subscription
 
 	connectionHandler Handler
-	heartbeatHandler  Handler
+	heartbeatHandler  *handlers.Heartbeat
 	ReceiverHandler   *handlers.Receiver
 }
 
 func NewDevice() *Device {
-	return &Device{
+	d := &Device{
 		eventListners:     make([]func(event events.Event), 0),
 		reconnect:         make(chan struct{}),
 		subscriptions:     make(map[string]*Subscription),
@@ -38,6 +39,12 @@ func NewDevice() *Device {
 		heartbeatHandler:  &handlers.Heartbeat{},
 		ReceiverHandler:   &handlers.Receiver{},
 	}
+
+	d.heartbeatHandler.OnFailure = func() {
+		d.Disconnect()
+	}
+
+	return d
 }
 
 func (d *Device) SetName(name string) {

@@ -128,11 +128,11 @@ func (d *Device) Disconnect() {
 
 		d.Lock()
 		d.subscriptions = make(map[string]*Subscription, 0)
-		d.Unlock()
 		d.Dispatch(events.Disconnected{})
 
 		d.conn.Close()
 		d.conn = nil
+		d.Unlock()
 	}
 
 	d.Lock()

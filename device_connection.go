@@ -119,23 +119,19 @@ func (d *Device) connect() error {
 }
 
 func (d *Device) Disconnect() {
+	d.Lock()
 	if d.conn != nil {
-		d.RLock()
 		for _, subscription := range d.subscriptions {
 			subscription.Handler.Disconnect()
 		}
-		d.RUnlock()
 
-		d.Lock()
 		d.subscriptions = make(map[string]*Subscription, 0)
 		d.Dispatch(events.Disconnected{})
 
 		d.conn.Close()
 		d.conn = nil
-		d.Unlock()
 	}
 
-	d.Lock()
 	d.connected = false
 	d.Unlock()
 }

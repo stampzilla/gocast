@@ -3,8 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
 	"github.com/stampzilla/gocast/responses"
@@ -23,28 +23,27 @@ func (r *Receiver) Connect() {
 }
 
 func (r *Receiver) Disconnect() {
-	r.knownApplications = make(map[string]responses.ApplicationSession, 0)
+	r.knownApplications = make(map[string]responses.ApplicationSession)
 }
 
 func (r *Receiver) Unmarshal(message string) {
-	log.Println("Receiver received: ", message)
+	logrus.Debug("Receiver received: ", message)
 
 	response := &responses.ReceiverResponse{}
 	err := json.Unmarshal([]byte(message), response)
-
 	if err != nil {
-		log.Printf("Failed to unmarshal status message:%s - %s\n", err, message)
+		logrus.Errorf("Failed to unmarshal status message:%s - %s\n", err, message)
 		return
 	}
 
-	if response.Type != responses.TypeStatus { //Probably an error like: {"reason":"CANCELLED","requestId":2,"type":"LAUNCH_ERROR"}
-		log.Println("Type RECEIVER_STATUS expected. Skipping.")
+	if response.Type != responses.TypeStatus { // Probably an error like: {"reason":"CANCELLED","requestId":2,"type":"LAUNCH_ERROR"}
+		logrus.Debugf("Type RECEIVER_STATUS expected got: %s", response.Type)
 		return
 	}
 
-	prev := make(map[string]responses.ApplicationSession, 0)
+	prev := make(map[string]responses.ApplicationSession)
 	if r.knownApplications == nil {
-		r.knownApplications = make(map[string]responses.ApplicationSession, 0)
+		r.knownApplications = make(map[string]responses.ApplicationSession)
 	}
 
 	// Make a copy of known applications
@@ -53,7 +52,7 @@ func (r *Receiver) Unmarshal(message string) {
 	}
 
 	for _, app := range response.Status.Applications {
-		// App allready running
+		// App already running
 		if _, ok := prev[app.AppID]; ok {
 			// Remove it from the list of previous known apps
 			delete(prev, app.AppID)
@@ -64,10 +63,6 @@ func (r *Receiver) Unmarshal(message string) {
 		r.knownApplications[app.AppID] = *app
 
 		r.Dispatch(events.AppStarted{app})
-		//AppID:       app.AppID,
-		//DisplayName: app.DisplayName,
-		//TransportId: app.TransportId,
-		//})
 	}
 
 	// Loop thru all stopped apps
@@ -75,10 +70,6 @@ func (r *Receiver) Unmarshal(message string) {
 		delete(r.knownApplications, key)
 
 		r.Dispatch(events.AppStopped{&app})
-		//AppID:       app.AppID,
-		//DisplayName: app.DisplayName,
-		//TransportId: app.TransportId,
-		//})
 	}
 
 	r.Dispatch(events.ReceiverStatus{
@@ -86,6 +77,7 @@ func (r *Receiver) Unmarshal(message string) {
 	})
 	r.status = response.Status
 }
+
 func (r *Receiver) GetSessionByAppId(appId string) *responses.ApplicationSession {
 	for _, app := range r.knownApplications {
 		if app.AppID == appId {
@@ -100,10 +92,9 @@ type LaunchRequest struct {
 	AppId string `json:"appId"`
 }
 
-var ErrAppAlreadyLaunched = fmt.Errorf("App already launched")
+var ErrAppAlreadyLaunched = fmt.Errorf("app already launched")
 
 func (r *Receiver) LaunchApp(appId string) error {
-	//already launched?
 	if app := r.GetSessionByAppId(appId); app != nil {
 		return ErrAppAlreadyLaunched
 	}
@@ -115,7 +106,7 @@ func (r *Receiver) LaunchApp(appId string) error {
 	return err
 }
 
-//TODO maybe do 0-100 instead of 0.0 to 1.0?
+// TODO maybe do 0-100 instead of 0.0 to 1.0?
 func (r *Receiver) SetVolume(volume float64) (*api.CastMessage, error) {
 	return r.Request(&responses.ReceiverStatus{
 		Headers: responses.Headers{Type: "SET_VOLUME"},

@@ -23,6 +23,7 @@ func (r *baseHandler) Dispatch(e events.Event) {
 func (r *baseHandler) RegisterSend(send func(responses.Payload) error) {
 	r.send = send
 }
+
 func (r *baseHandler) Send(p responses.Payload) error {
 	return r.send(p)
 }
@@ -30,6 +31,7 @@ func (r *baseHandler) Send(p responses.Payload) error {
 func (r *baseHandler) RegisterRequest(send func(responses.Payload) (*api.CastMessage, error)) {
 	r.request = send
 }
+
 func (r *baseHandler) Request(p responses.Payload) (*api.CastMessage, error) {
 	return r.request(p)
 }

@@ -27,11 +27,11 @@ func main() {
 
 func discoveryListner(discovery *discovery.Service) {
 	for device := range discovery.Found() {
-		fmt.Printf("New device discoverd: %#v \n", device)
+		fmt.Printf("New device discovered: %#v \n", device)
 
-		//plexHandler := NewPlexHandler()
-		//device.Subscribe("urn:x-cast:plex", plexHandler)
-		//device.Subscribe("urn:x-cast:com.google.cast.media", mediaHandler)
+		// plexHandler := NewPlexHandler()
+		// device.Subscribe("urn:x-cast:plex", plexHandler)
+		// device.Subscribe("urn:x-cast:com.google.cast.media", mediaHandler)
 
 		device.OnEvent(func(event events.Event) {
 			switch data := event.(type) {
@@ -46,8 +46,8 @@ func discoveryListner(discovery *discovery.Service) {
 				fmt.Println(device.Name(), "- App started:", data.DisplayName, "(", data.AppID, ")")
 			case events.AppStopped:
 				fmt.Println(device.Name(), "- App stopped:", data.DisplayName, "(", data.AppID, ")")
-			//gocast.MediaEvent:
-			//plexEvent:
+			// gocast.MediaEvent:
+			// plexEvent:
 			default:
 				fmt.Printf("unexpected event %T: %#v\n", data, data)
 			}

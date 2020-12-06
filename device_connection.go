@@ -4,11 +4,11 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gogo/protobuf/proto"
+	"github.com/sirupsen/logrus"
 	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
 	"github.com/stampzilla/gocast/responses"
@@ -17,29 +17,25 @@ import (
 func (d *Device) reader() {
 	for {
 		packet, err := d.wrapper.Read()
-
 		if err != nil {
-			log.Println("Error reading from chromecast error:", err, "Packet:", packet)
+			logrus.Errorf("Error reading from chromecast error: %s Packet: %#v", err, packet)
 			d.Disconnect()
-			//d.reconnect <- struct{}{}
 			return
 		}
 
 		message := &api.CastMessage{}
 		err = proto.Unmarshal(*packet, message)
 		if err != nil {
-			log.Fatalf("Failed to unmarshal CastMessage: %s", err)
+			logrus.Errorf("Failed to unmarshal CastMessage: %s", err)
 			continue
 		}
-
-		//spew.Dump("Message!", message)
 
 		headers := &responses.Headers{}
 
 		err = json.Unmarshal([]byte(*message.PayloadUtf8), headers)
 
 		if err != nil {
-			log.Fatalf("Failed to unmarshal message: %s", err)
+			logrus.Errorf("Failed to unmarshal message: %s", err)
 			continue
 		}
 
@@ -53,8 +49,8 @@ func (d *Device) reader() {
 		d.RUnlock()
 
 		if !catched {
-			log.Println("LOST MESSAGE:")
-			spew.Dump(message)
+			logrus.Debug("LOST MESSAGE:")
+			logrus.Debug(spew.Sdump(message))
 		}
 	}
 }
@@ -64,31 +60,38 @@ func (d *Device) Connected() bool {
 	defer d.RUnlock()
 	return d.connected
 }
+
 func (d *Device) Connect() error {
 	go d.reconnector()
 	return d.connect()
 }
+
 func (d *Device) Reconnect() {
 	select {
 	case d.reconnect <- struct{}{}:
 	default:
 	}
 }
+
 func (d *Device) reconnector() {
 	for {
 		select {
 		case <-d.reconnect:
-			log.Println("Reconnect signal received")
+			logrus.Info("Reconnect signal received")
 			time.Sleep(time.Second * 2)
-			d.connect()
+			err := d.connect()
+			if err != nil {
+				logrus.Error(err)
+			}
 		}
 	}
 }
+
 func (d *Device) connect() error {
-	log.Printf("connecting to %s:%d ...", d.ip, d.port)
+	logrus.Infof("connecting to %s:%d ...", d.ip, d.port)
 
 	if d.conn != nil {
-		return fmt.Errorf("Already connected to: %s (%s:%d)", d.Name(), d.Ip().String(), d.Port())
+		return fmt.Errorf("already connected to: %s (%s:%d)", d.Name(), d.Ip().String(), d.Port())
 	}
 
 	var err error
@@ -97,16 +100,14 @@ func (d *Device) connect() error {
 	})
 
 	if err != nil {
-		//d.reconnect <- struct{}{}
-		return fmt.Errorf("Failed to connect to Chromecast. Error:%s", err)
+		return fmt.Errorf("failed to connect to Chromecast. Error:%s", err)
 	}
 
 	d.Lock()
 	d.connected = true
 	d.Unlock()
 
-	event := events.Connected{}
-	d.Dispatch(event)
+	d.Dispatch(events.Connected{})
 
 	d.wrapper = NewPacketStream(d.conn)
 	go d.reader()
@@ -139,7 +140,6 @@ func (d *Device) Disconnect() {
 func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Payload) error {
 	payloadJson, err := json.Marshal(payload)
 	if err != nil {
-		fmt.Println("Failed to json.Marshal: ", err)
 		return err
 	}
 	payloadString := string(payloadJson)
@@ -157,16 +157,15 @@ func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Pay
 
 	data, err := proto.Marshal(message)
 	if err != nil {
-		fmt.Println("Failed to proto.Marshal: ", err)
 		return err
 	}
 
 	if *message.Namespace != "urn:x-cast:com.google.cast.tp.heartbeat" {
-		log.Println("Writing:", spew.Sdump(message))
+		logrus.Debug("Writing:", spew.Sdump(message))
 	}
 
 	if d.conn == nil {
-		return fmt.Errorf("We are disconnected, cannot send!")
+		return fmt.Errorf("we are disconnected, cannot send!")
 	}
 
 	_, err = d.wrapper.Write(data)

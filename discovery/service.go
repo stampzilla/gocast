@@ -33,9 +33,8 @@ func NewService() *Service {
 }
 
 func (d *Service) Periodic(interval time.Duration) error {
-
 	if d.stopPeriodic != nil {
-		return fmt.Errorf("Periodic discovery is allready running")
+		return fmt.Errorf("Periodic discovery is already running")
 	}
 
 	mdns.Query(&mdns.QueryParam{
@@ -82,7 +81,7 @@ func (d *Service) Found() chan *gocast.Device {
 
 func (d *Service) listner() {
 	for entry := range d.entriesCh {
-		//fmt.Printf("Got new entry: %#v\n", entry)
+		// fmt.Printf("Got new entry: %#v\n", entry)
 
 		name := strings.Split(entry.Name, "._googlecast")
 

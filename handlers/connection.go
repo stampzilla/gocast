@@ -1,8 +1,7 @@
 package handlers
 
 import (
-	"fmt"
-
+	"github.com/sirupsen/logrus"
 	"github.com/stampzilla/gocast/responses"
 )
 
@@ -19,5 +18,5 @@ func (c *Connection) Disconnect() {
 }
 
 func (c *Connection) Unmarshal(message string) {
-	fmt.Println("Connection received: ", message)
+	logrus.Info("Connection received: ", message)
 }

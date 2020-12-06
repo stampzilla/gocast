@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+
+	"github.com/sirupsen/logrus"
 )
 
 type packetStream struct {
@@ -31,27 +33,26 @@ func (w *packetStream) readPackets() {
 
 	go func() {
 		for {
-
 			err := binary.Read(w.stream, binary.BigEndian, &length)
 			if err != nil {
-				fmt.Printf("Failed binary.Read packet: %s", err)
+				logrus.Errorf("Failed binary.Read packet: %s", err)
 				w.packets <- packetContainer{err: err, payload: nil}
 				return
 			}
 
-			//TODO make sure this goroutine is killed on disconnect
+			// TODO make sure this goroutine is killed on disconnect
 
 			if length > 0 {
 				packet := make([]byte, length)
 
 				i, err := w.stream.Read(packet)
 				if err != nil {
-					fmt.Printf("Failed to read packet: %s", err)
+					logrus.Errorf("Failed to read packet: %s", err)
 					continue
 				}
 
 				if i != int(length) {
-					fmt.Printf("Invalid packet size. Wanted: %d Read: %d", length, i)
+					logrus.Errorf("Invalid packet size. Wanted: %d Read: %d", length, i)
 					continue
 				}
 
@@ -60,7 +61,6 @@ func (w *packetStream) readPackets() {
 					err:     nil,
 				}
 			}
-
 		}
 	}()
 }
@@ -74,9 +74,7 @@ func (w *packetStream) Read() (*[]byte, error) {
 }
 
 func (w *packetStream) Write(data []byte) (int, error) {
-
 	err := binary.Write(w.stream, binary.BigEndian, uint32(len(data)))
-
 	if err != nil {
 		err = fmt.Errorf("Failed to write packet length %d. error:%s\n", len(data), err)
 		return 0, err

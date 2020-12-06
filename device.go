@@ -1,11 +1,11 @@
 package gocast
 
 import (
-	"log"
 	"net"
 	"strconv"
 	"sync"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
 	"github.com/stampzilla/gocast/handlers"
@@ -50,12 +50,15 @@ func NewDevice() *Device {
 func (d *Device) SetName(name string) {
 	d.name = name
 }
+
 func (d *Device) SetUuid(uuid string) {
 	d.uuid = uuid
 }
+
 func (d *Device) SetIp(ip net.IP) {
 	d.ip = ip
 }
+
 func (d *Device) SetPort(port int) {
 	d.port = port
 }
@@ -63,12 +66,15 @@ func (d *Device) SetPort(port int) {
 func (d *Device) Name() string {
 	return d.name
 }
+
 func (d *Device) Uuid() string {
 	return d.uuid
 }
+
 func (d *Device) Ip() net.IP {
 	return d.ip
 }
+
 func (d *Device) Port() int {
 	return d.port
 }
@@ -98,8 +104,7 @@ func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 	handler.RegisterDispatch(d.Dispatch)
 	handler.Connect()
 
-	log.Println("Subscribing to ", urn, " --- ", destinationId)
-
+	logrus.Debug("Subscribing to ", urn, " --- ", destinationId)
 }
 
 func (d *Device) UnsubscribeByUrn(urn string) {
@@ -117,6 +122,7 @@ func (d *Device) UnsubscribeByUrn(urn string) {
 		delete(d.subscriptions, sub)
 	}
 }
+
 func (d *Device) UnsubscribeByUrnAndDestinationId(urn, destinationId string) {
 	subs := []string{}
 	d.RLock()

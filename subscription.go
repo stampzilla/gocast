@@ -33,7 +33,7 @@ func (s *Subscription) Send(payload responses.Payload) error {
 	return s.Device.Send(s.Urn, s.SourceId, s.DestinationId, payload)
 }
 
-// Request works like send, but waits for resposne to requestId before returning
+// Request works like send, but waits for resposne to requestId before returning.
 func (s *Subscription) Request(payload responses.Payload) (*api.CastMessage, error) {
 	requestId := int(atomic.AddInt64(&s.requestId, 1))
 	payload.SetRequestId(requestId)
@@ -41,7 +41,7 @@ func (s *Subscription) Request(payload responses.Payload) (*api.CastMessage, err
 	response := make(chan *api.CastMessage)
 	s.inFlight[requestId] = response
 
-	//err := s.Send(payload)
+	// err := s.Send(payload)
 	err := s.Device.Send(s.Urn, s.SourceId, s.DestinationId, payload)
 	if err != nil {
 		delete(s.inFlight, requestId)
@@ -66,7 +66,7 @@ func (s *Subscription) Receive(message *api.CastMessage, headers *responses.Head
 
 	s.Handler.Unmarshal(message.GetPayloadUtf8())
 
-	//if this is a request we must send the response back to the pending request
+	// if this is a request we must send the response back to the pending request
 	if headers.RequestId != nil && *headers.RequestId != 0 {
 		if listener, ok := s.inFlight[*headers.RequestId]; ok {
 			listener <- message

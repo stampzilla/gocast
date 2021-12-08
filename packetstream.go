@@ -1,6 +1,7 @@
 package gocast
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -14,33 +15,31 @@ type packetStream struct {
 }
 
 type packetContainer struct {
-	payload *[]byte
+	payload []byte
 	err     error
 }
 
 func NewPacketStream(stream io.ReadWriteCloser) *packetStream {
-	wrapper := packetStream{
+	return &packetStream{
 		stream:  stream,
 		packets: make(chan packetContainer),
 	}
-	wrapper.readPackets()
-
-	return &wrapper
 }
 
-func (w *packetStream) readPackets() {
+func (w *packetStream) readPackets(ctx context.Context) {
 	var length uint32
 
 	go func() {
 		for {
+			if ctx.Err() != nil {
+				logrus.Errorf("closing packetStream reader %s", ctx.Err())
+			}
 			err := binary.Read(w.stream, binary.BigEndian, &length)
 			if err != nil {
 				logrus.Errorf("Failed binary.Read packet: %s", err)
 				w.packets <- packetContainer{err: err, payload: nil}
 				return
 			}
-
-			// TODO make sure this goroutine is killed on disconnect
 
 			if length > 0 {
 				packet := make([]byte, length)
@@ -57,20 +56,12 @@ func (w *packetStream) readPackets() {
 				}
 
 				w.packets <- packetContainer{
-					payload: &packet,
+					payload: packet,
 					err:     nil,
 				}
 			}
 		}
 	}()
-}
-
-func (w *packetStream) Read() (*[]byte, error) {
-	pkt := <-w.packets
-	if pkt.err != nil {
-		close(w.packets)
-	}
-	return pkt.payload, pkt.err
 }
 
 func (w *packetStream) Write(data []byte) (int, error) {

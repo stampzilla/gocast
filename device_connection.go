@@ -1,6 +1,7 @@
 package gocast
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -14,88 +15,86 @@ import (
 	"github.com/stampzilla/gocast/responses"
 )
 
-func (d *Device) reader() {
-	for {
-		packet, err := d.wrapper.Read()
-		if err != nil {
-			logrus.Errorf("Error reading from chromecast error: %s Packet: %#v", err, packet)
-			d.Disconnect()
-			return
-		}
-
-		message := &api.CastMessage{}
-		err = proto.Unmarshal(*packet, message)
-		if err != nil {
-			logrus.Errorf("Failed to unmarshal CastMessage: %s", err)
-			continue
-		}
-
-		headers := &responses.Headers{}
-
-		err = json.Unmarshal([]byte(*message.PayloadUtf8), headers)
-
-		if err != nil {
-			logrus.Errorf("Failed to unmarshal message: %s", err)
-			continue
-		}
-
-		catched := false
-		d.RLock()
-		for _, subscription := range d.subscriptions {
-			if subscription.Receive(message, headers) {
-				catched = true
-			}
-		}
-		d.RUnlock()
-
-		if !catched {
-			logrus.Debug("LOST MESSAGE:")
-			logrus.Debug(spew.Sdump(message))
-		}
-	}
-}
-
-func (d *Device) Connected() bool {
-	d.RLock()
-	defer d.RUnlock()
-	return d.connected
-}
-
-func (d *Device) Connect() error {
-	go d.reconnector()
-	return d.connect()
-}
-
-func (d *Device) Reconnect() {
-	select {
-	case d.reconnect <- struct{}{}:
-	default:
-	}
-}
-
-func (d *Device) reconnector() {
+func (d *Device) reader(ctx context.Context) {
 	for {
 		select {
-		case <-d.reconnect:
-			logrus.Info("Reconnect signal received")
-			time.Sleep(time.Second * 2)
-			err := d.connect()
+		case <-ctx.Done():
+			if ctx.Err() != nil {
+				logrus.Errorf("closing reader %s: %s", d.Name(), ctx.Err())
+			}
+			return
+		case p := <-d.wrapper.packets:
+			if p.err != nil {
+				logrus.Errorf("Error reading from chromecast error: %s Packet: %#v", p.err, p)
+				return
+			}
+			packet := p.payload
+
+			message := &api.CastMessage{}
+			err := proto.Unmarshal(packet, message)
 			if err != nil {
-				logrus.Error(err)
+				logrus.Errorf("Failed to unmarshal CastMessage: %s", err)
+				continue
+			}
+
+			headers := &responses.Headers{}
+
+			err = json.Unmarshal([]byte(*message.PayloadUtf8), headers)
+
+			if err != nil {
+				logrus.Errorf("Failed to unmarshal message: %s", err)
+				continue
+			}
+
+			catched := false
+			for _, subscription := range d.getSubscriptionsAsSlice() {
+				if subscription.Receive(message, headers) {
+					catched = true
+				}
+			}
+
+			if !catched {
+				logrus.Debug("LOST MESSAGE:")
+				logrus.Debug(spew.Sdump(message))
 			}
 		}
 	}
 }
 
-func (d *Device) connect() error {
-	logrus.Infof("connecting to %s:%d ...", d.ip, d.port)
+func (d *Device) Connect(ctx context.Context) error {
+	d.heartbeatHandler.OnFailure = func() { // make sure we reconnect if we loose heartbeat
+		logrus.Errorf("heartbeat timeout for: %s trying to reconnect", d.Name())
 
-	if d.conn != nil {
-		return fmt.Errorf("already connected to: %s (%s:%d)", d.Name(), d.Ip().String(), d.Port())
+		d.Disconnect()
+		for { // try to connect until no error
+			err := d.connect(ctx)
+			if err == nil {
+				break
+			}
+			logrus.Error("error reconnect: ", err)
+			time.Sleep(2 * time.Second)
+		}
+	}
+	return d.connect(ctx)
+}
+
+func (d *Device) connect(pCtx context.Context) error {
+	ctx, cancel := context.WithCancel(pCtx)
+	d.stop = cancel
+
+	ip := d.Ip()
+	port := d.Port()
+
+	logrus.Infof("connecting to %s:%d ...", ip, port)
+
+	if d.getConn() != nil {
+		err := d.conn.Close()
+		if err != nil {
+			logrus.Error("trying to connect with existing connection. error closing: ", err)
+		}
 	}
 
-	var err error
-	d.conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", d.ip, d.port), &tls.Config{
+	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", ip, port), &tls.Config{
 		InsecureSkipVerify: true,
 	})
 
@@ -104,37 +103,50 @@ func (d *Device) connect() error {
 	}
 
 	d.Lock()
+	d.conn = conn
 	d.connected = true
 	d.Unlock()
 
-	d.Dispatch(events.Connected{})
-
 	d.wrapper = NewPacketStream(d.conn)
-	go d.reader()
+	go d.wrapper.readPackets(ctx)
+	go d.reader(ctx)
 
 	d.Subscribe("urn:x-cast:com.google.cast.tp.connection", "receiver-0", d.connectionHandler)
 	d.Subscribe("urn:x-cast:com.google.cast.tp.heartbeat", "receiver-0", d.heartbeatHandler)
 	d.Subscribe("urn:x-cast:com.google.cast.receiver", "receiver-0", d.ReceiverHandler)
 
+	d.Dispatch(events.Connected{})
+
 	return nil
 }
 
 func (d *Device) Disconnect() {
+	logrus.Debug("disconnecting: ", d.Name())
+
+	for _, subscription := range d.getSubscriptionsAsSlice() {
+		logrus.Debugf("disconnect subscription %s: %s ", d.Name(), subscription.Urn)
+		subscription.Handler.Disconnect()
+	}
 	d.Lock()
-	if d.conn != nil {
-		for _, subscription := range d.subscriptions {
-			subscription.Handler.Disconnect()
-		}
+	d.subscriptions = make(map[string]*Subscription)
+	d.Unlock()
 
-		d.subscriptions = make(map[string]*Subscription, 0)
-		d.Dispatch(events.Disconnected{})
-
-		d.conn.Close()
-		d.conn = nil
+	if d.stop != nil { // make sure any old goroutines are stopped
+		d.stop()
 	}
 
+	if c := d.getConn(); d != nil {
+		c.Close()
+		d.Lock()
+		d.conn = nil
+		d.Unlock()
+	}
+
+	d.Lock()
 	d.connected = false
 	d.Unlock()
+
+	d.Dispatch(events.Disconnected{})
 }
 
 func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Payload) error {
@@ -161,7 +173,7 @@ func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Pay
 	}
 
 	if *message.Namespace != "urn:x-cast:com.google.cast.tp.heartbeat" {
-		logrus.Debug("Writing:", spew.Sdump(message))
+		logrus.Debugf("Writing to %s: %s", d.Name(), spew.Sdump(message))
 	}
 
 	if d.conn == nil {

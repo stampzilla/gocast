@@ -2,13 +2,16 @@
 package discovery
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/micro/mdns"
+	"github.com/sirupsen/logrus"
 	"github.com/stampzilla/gocast"
 )
 
@@ -16,50 +19,57 @@ type Service struct {
 	found     chan *gocast.Device
 	entriesCh chan *mdns.ServiceEntry
 
-	foundDevices map[string]*gocast.Device
-	stopPeriodic chan struct{}
+	foundDevices    map[string]*gocast.Device
+	periodicRunning uint32
+	stop            context.CancelFunc
 }
 
 func NewService() *Service {
-	s := &Service{
+	return &Service{
 		found:        make(chan *gocast.Device),
 		entriesCh:    make(chan *mdns.ServiceEntry),
-		foundDevices: make(map[string]*gocast.Device, 0),
+		foundDevices: make(map[string]*gocast.Device),
 	}
-
-	go s.listner()
-
-	return s
 }
 
-func (d *Service) Periodic(interval time.Duration) error {
-	if d.stopPeriodic != nil {
+func (d *Service) periodic(ctx context.Context, interval time.Duration) error {
+	if i := atomic.LoadUint32(&d.periodicRunning); i != 0 {
 		return fmt.Errorf("Periodic discovery is already running")
 	}
 
-	mdns.Query(&mdns.QueryParam{
+	c, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	err := mdns.Query(&mdns.QueryParam{
 		Service: "_googlecast._tcp",
 		Domain:  "local",
 		Timeout: time.Second * 1,
 		Entries: d.entriesCh,
+		Context: c,
 	})
 
+	if err != nil {
+		logrus.Error("error doing mdns query: ", err)
+	}
+
 	ticker := time.NewTicker(interval)
-	d.stopPeriodic = make(chan struct{})
+	atomic.AddUint32(&d.periodicRunning, 1)
 	go func() {
 		for {
-			mdns.Query(&mdns.QueryParam{
+			err := mdns.Query(&mdns.QueryParam{
 				Service: "_googlecast._tcp",
 				Domain:  "local",
 				Timeout: time.Second * 1,
 				Entries: d.entriesCh,
+				Context: c,
 			})
+			if err != nil {
+				logrus.Error("error doing mdns query: ", err)
+			}
 			select {
 			case <-ticker.C:
-			case <-d.stopPeriodic:
+			case <-ctx.Done():
 				ticker.Stop()
-				d.foundDevices = make(map[string]*gocast.Device, 0)
-
+				logrus.Debug("stopping periodic goroutine")
 				return
 			}
 		}
@@ -68,10 +78,20 @@ func (d *Service) Periodic(interval time.Duration) error {
 	return nil
 }
 
+func (d *Service) Start(pCtx context.Context, interval time.Duration) {
+	ctx, cancel := context.WithCancel(pCtx)
+	d.stop = cancel
+
+	go d.listner(ctx)
+	err := d.periodic(ctx, interval)
+	if err != nil {
+		logrus.Error("error starting periodic mdns query: ", err)
+	}
+}
+
 func (d *Service) Stop() {
-	if d.stopPeriodic != nil {
-		close(d.stopPeriodic)
-		d.stopPeriodic = nil
+	if d.stop != nil {
+		d.stop()
 	}
 }
 
@@ -79,50 +99,56 @@ func (d *Service) Found() chan *gocast.Device {
 	return d.found
 }
 
-func (d *Service) listner() {
-	for entry := range d.entriesCh {
-		// fmt.Printf("Got new entry: %#v\n", entry)
-
-		name := strings.Split(entry.Name, "._googlecast")
-
-		// Skip everything that dont have googlecast in the fdqn
-		if len(name) < 2 {
-			continue
-		}
-
-		info := decodeTxtRecord(entry.Info)
-		key := info["id"] // Use device ID as key, allowes the device to change IP
-
-		if dev, ok := d.foundDevices[key]; ok {
-			// If not connected, update address and reconnect
-			if !dev.Connected() {
-				dev.SetIp(entry.AddrV4)
-				dev.SetPort(entry.Port)
-				dev.Reconnect()
-			}
-			// Skip already connected devices
-			continue
-		}
-
-		device := gocast.NewDevice()
-		device.SetIp(entry.AddrV4)
-		device.SetPort(entry.Port)
-
-		device.SetUuid(key)
-		device.SetName(info["fn"])
-
-		d.foundDevices[key] = device
-
+func (d *Service) listner(ctx context.Context) {
+	for {
 		select {
-		case d.found <- device:
-		case <-time.After(time.Second):
+		case <-ctx.Done():
+			logrus.Debug("stopping listner goroutine")
+			d.foundDevices = make(map[string]*gocast.Device)
+			return
+		case entry := <-d.entriesCh:
+			// fmt.Printf("Got new entry: %#v\n", entry)
+
+			name := strings.Split(entry.Name, "._googlecast")
+
+			// Skip everything that dont have googlecast in the fdqn
+			if len(name) < 2 {
+				continue
+			}
+
+			info := decodeTxtRecord(entry.Info)
+			key := info["id"] // Use device ID as key, allowes the device to change IP
+
+			if dev, ok := d.foundDevices[key]; ok {
+				// If not connected, update address so we can reconnect to it
+				if !dev.Connected() {
+					dev.SetIp(entry.AddrV4)
+					dev.SetPort(entry.Port)
+				}
+				// Skip already connected devices
+				continue
+			}
+
+			device := gocast.NewDevice()
+			device.SetIp(entry.AddrV4)
+			device.SetPort(entry.Port)
+
+			device.SetUuid(key)
+			device.SetName(info["fn"])
+
+			d.foundDevices[key] = device
+
+			select {
+			case d.found <- device:
+			case <-time.After(time.Second):
+			}
 		}
 	}
 }
 
 func decodeDnsEntry(text string) string {
-	text = strings.Replace(text, `\.`, ".", -1)
-	text = strings.Replace(text, `\ `, " ", -1)
+	text = strings.ReplaceAll(text, `\.`, ".")
+	text = strings.ReplaceAll(text, `\ `, " ")
 
 	re := regexp.MustCompile(`([\\][0-9][0-9][0-9])`)
 	text = re.ReplaceAllStringFunc(text, func(source string) string {

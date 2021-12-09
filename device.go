@@ -1,6 +1,7 @@
 package gocast
 
 import (
+	"context"
 	"net"
 	"strconv"
 	"sync"
@@ -22,6 +23,8 @@ type Device struct {
 	wrapper   *packetStream
 	reconnect chan struct{}
 
+	stop context.CancelFunc
+
 	eventListners []func(event events.Event)
 	subscriptions map[string]*Subscription
 
@@ -36,47 +39,81 @@ func NewDevice() *Device {
 		reconnect:         make(chan struct{}),
 		subscriptions:     make(map[string]*Subscription),
 		connectionHandler: &handlers.Connection{},
-		heartbeatHandler:  &handlers.Heartbeat{},
+		heartbeatHandler:  handlers.NewHeartbeat(),
 		ReceiverHandler:   &handlers.Receiver{},
-	}
-
-	d.heartbeatHandler.OnFailure = func() {
-		d.Disconnect()
 	}
 
 	return d
 }
 
 func (d *Device) SetName(name string) {
+	d.Lock()
 	d.name = name
+	d.Unlock()
 }
 
 func (d *Device) SetUuid(uuid string) {
+	d.Lock()
 	d.uuid = uuid
+	d.Unlock()
 }
 
 func (d *Device) SetIp(ip net.IP) {
+	d.Lock()
 	d.ip = ip
+	d.Unlock()
 }
 
 func (d *Device) SetPort(port int) {
+	d.Lock()
 	d.port = port
+	d.Unlock()
 }
 
 func (d *Device) Name() string {
+	d.RLock()
+	defer d.RUnlock()
 	return d.name
 }
 
 func (d *Device) Uuid() string {
+	d.RLock()
+	defer d.RUnlock()
 	return d.uuid
 }
 
 func (d *Device) Ip() net.IP {
+	d.RLock()
+	defer d.RUnlock()
 	return d.ip
 }
 
 func (d *Device) Port() int {
+	d.RLock()
+	defer d.RUnlock()
 	return d.port
+}
+
+func (d *Device) Connected() bool {
+	d.RLock()
+	defer d.RUnlock()
+	return d.connected
+}
+func (d *Device) getConn() net.Conn {
+	d.RLock()
+	defer d.RUnlock()
+	return d.conn
+}
+func (d *Device) getSubscriptionsAsSlice() []*Subscription {
+	d.RLock()
+	subs := make([]*Subscription, len(d.subscriptions))
+	i := 0
+	for _, v := range d.subscriptions {
+		subs[i] = v
+		i++
+	}
+	defer d.RUnlock()
+	return subs
 }
 
 func (d *Device) String() string {
@@ -117,10 +154,10 @@ func (d *Device) UnsubscribeByUrn(urn string) {
 	}
 	d.RUnlock()
 	d.Lock()
-	defer d.Unlock()
 	for _, sub := range subs {
 		delete(d.subscriptions, sub)
 	}
+	d.Unlock()
 }
 
 func (d *Device) UnsubscribeByUrnAndDestinationId(urn, destinationId string) {

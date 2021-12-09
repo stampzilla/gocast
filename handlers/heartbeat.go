@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"time"
 
 	"github.com/stampzilla/gocast/responses"
@@ -9,30 +10,34 @@ import (
 type Heartbeat struct {
 	OnFailure func()
 	baseHandler
-	ticker         *time.Ticker
-	shutdown       chan struct{}
 	receivedAnswer chan struct{}
+	stop           context.CancelFunc
+}
+
+func NewHeartbeat() *Heartbeat {
+	return &Heartbeat{
+		receivedAnswer: make(chan struct{}),
+	}
 }
 
 func (h *Heartbeat) Connect() {
-	if h.ticker != nil {
-		h.ticker.Stop()
-		if h.shutdown != nil {
-			close(h.shutdown)
-			h.shutdown = nil
-		}
+	if h.stop != nil {
+		h.stop()
 	}
 
-	h.ticker = time.NewTicker(time.Second * 5)
-	h.shutdown = make(chan struct{})
-	h.receivedAnswer = make(chan struct{})
+	//TODO take context from parent
+	ctx, s := context.WithCancel(context.Background())
+	h.stop = s
+
 	go func() {
+		ticker := time.NewTicker(time.Second * 5)
+		defer ticker.Stop()
 		for {
 			// Send out a ping
 			select {
-			case <-h.ticker.C:
+			case <-ticker.C:
 				h.Ping()
-			case <-h.shutdown:
+			case <-ctx.Done():
 				return
 			}
 
@@ -40,7 +45,7 @@ func (h *Heartbeat) Connect() {
 			select {
 			case <-time.After(time.Second * 10):
 				h.OnFailure()
-			case <-h.shutdown:
+			case <-ctx.Done():
 				return
 			case <-h.receivedAnswer:
 				// everything great, carry on
@@ -50,19 +55,13 @@ func (h *Heartbeat) Connect() {
 }
 
 func (h *Heartbeat) Disconnect() {
-	if h.ticker != nil {
-		h.ticker.Stop()
-		if h.shutdown != nil {
-			close(h.shutdown)
-			h.shutdown = nil
-		}
+	if h.stop != nil {
+		h.stop()
 	}
 }
 
+// Unmarshal takes the message and notifies our timeout goroutine to check if we get pong or not.
 func (h *Heartbeat) Unmarshal(message string) {
-	// fmt.Println("Heartbeat received: ", message)
-
-	// Try to notify our timeout montor
 	select {
 	case h.receivedAnswer <- struct{}{}:
 	case <-time.After(time.Second):

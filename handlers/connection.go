@@ -14,9 +14,13 @@ func (c *Connection) Connect() {
 }
 
 func (c *Connection) Disconnect() {
-	c.Send(&responses.Headers{Type: "CLOSE"})
+	logrus.Debug("sending disconnect from connection handler")
+	err := c.Send(&responses.Headers{Type: "CLOSE"})
+	if err != nil {
+		logrus.Error("error sending disconnect: ", err)
+	}
 }
 
 func (c *Connection) Unmarshal(message string) {
-	logrus.Info("Connection received: ", message)
+	logrus.Debug("Connection received: ", message)
 }

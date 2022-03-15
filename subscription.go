@@ -48,10 +48,14 @@ func (s *Subscription) Request(payload responses.Payload) (*api.CastMessage, err
 		return nil, err
 	}
 
+	delay := time.NewTimer(time.Second * 10)
 	select {
 	case reply := <-response:
+		if !delay.Stop() {
+			<-delay.C
+		}
 		return reply, nil
-	case <-time.After(time.Second * 10):
+	case <-delay.C:
 		delete(s.inFlight, requestId)
 		return nil, fmt.Errorf("Timeout sending: %s", spew.Sdump(payload))
 	}

@@ -138,9 +138,13 @@ func (d *Service) listner(ctx context.Context) {
 
 			d.foundDevices[key] = device
 
+			delay := time.NewTimer(time.Second)
 			select {
 			case d.found <- device:
-			case <-time.After(time.Second):
+				if !delay.Stop() {
+					<-delay.C
+				}
+			case <-delay.C:
 			}
 		}
 	}

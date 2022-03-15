@@ -25,7 +25,7 @@ func (h *Heartbeat) Connect() {
 		h.stop()
 	}
 
-	//TODO take context from parent
+	// TODO take context from parent
 	ctx, s := context.WithCancel(context.Background())
 	h.stop = s
 
@@ -42,12 +42,19 @@ func (h *Heartbeat) Connect() {
 			}
 
 			// Wait for it to be received
+			delay := time.NewTimer(time.Second * 10)
 			select {
-			case <-time.After(time.Second * 10):
+			case <-delay.C:
 				h.OnFailure()
 			case <-ctx.Done():
+				if !delay.Stop() {
+					<-delay.C
+				}
 				return
 			case <-h.receivedAnswer:
+				if !delay.Stop() {
+					<-delay.C
+				}
 				// everything great, carry on
 			}
 		}
@@ -62,9 +69,13 @@ func (h *Heartbeat) Disconnect() {
 
 // Unmarshal takes the message and notifies our timeout goroutine to check if we get pong or not.
 func (h *Heartbeat) Unmarshal(message string) {
+	delay := time.NewTimer(time.Second)
 	select {
 	case h.receivedAnswer <- struct{}{}:
-	case <-time.After(time.Second):
+		if !delay.Stop() {
+			<-delay.C
+		}
+	case <-delay.C:
 	}
 }
 

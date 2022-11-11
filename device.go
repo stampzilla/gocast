@@ -31,9 +31,11 @@ type Device struct {
 	connectionHandler Handler
 	heartbeatHandler  *handlers.Heartbeat
 	ReceiverHandler   *handlers.Receiver
+
+	logger logrus.FieldLogger
 }
 
-func NewDevice() *Device {
+func NewDevice(logger logrus.FieldLogger) *Device {
 	d := &Device{
 		eventListners:     make([]func(event events.Event), 0),
 		reconnect:         make(chan struct{}),
@@ -41,11 +43,16 @@ func NewDevice() *Device {
 		connectionHandler: &handlers.Connection{},
 		heartbeatHandler:  handlers.NewHeartbeat(),
 		ReceiverHandler:   &handlers.Receiver{},
+		logger:            logger,
 	}
 
 	return d
 }
-
+func (d *Device) SetLogger(logger logrus.FieldLogger) {
+	d.Lock()
+	d.logger = logger
+	d.Unlock()
+}
 func (d *Device) SetName(name string) {
 	d.Lock()
 	d.name = name
@@ -94,11 +101,6 @@ func (d *Device) Port() int {
 	return d.port
 }
 
-func (d *Device) Connected() bool {
-	d.RLock()
-	defer d.RUnlock()
-	return d.connected
-}
 func (d *Device) getConn() net.Conn {
 	d.RLock()
 	defer d.RUnlock()
@@ -117,7 +119,7 @@ func (d *Device) getSubscriptionsAsSlice() []*Subscription {
 }
 
 func (d *Device) String() string {
-	return d.name + " - " + d.ip.String() + ":" + strconv.Itoa(d.port)
+	return d.Name() + " - " + d.ip.String() + ":" + strconv.Itoa(d.port)
 }
 
 func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
@@ -141,7 +143,7 @@ func (d *Device) Subscribe(urn, destinationId string, handler Handler) {
 	handler.RegisterDispatch(d.Dispatch)
 	handler.Connect()
 
-	logrus.Debug("Subscribing to ", urn, " --- ", destinationId)
+	d.logger.Debug("Subscribing to ", urn, " --- ", destinationId)
 }
 
 func (d *Device) UnsubscribeByUrn(urn string) {

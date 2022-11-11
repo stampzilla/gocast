@@ -22,7 +22,6 @@ func (m *Media) Connect() {
 }
 
 func (m *Media) Disconnect() {
-	// r.knownApplications = make(map[string]responses.ApplicationSession, 0)
 	m.currentStatus = nil
 }
 

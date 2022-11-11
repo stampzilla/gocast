@@ -12,6 +12,7 @@ import (
 type packetStream struct {
 	stream  io.ReadWriteCloser
 	packets chan packetContainer
+	logger  logrus.FieldLogger
 }
 
 type packetContainer struct {
@@ -19,10 +20,11 @@ type packetContainer struct {
 	err     error
 }
 
-func NewPacketStream(stream io.ReadWriteCloser) *packetStream {
+func NewPacketStream(stream io.ReadWriteCloser, logger logrus.FieldLogger) *packetStream {
 	return &packetStream{
 		stream:  stream,
 		packets: make(chan packetContainer),
+		logger:  logger,
 	}
 }
 
@@ -32,11 +34,11 @@ func (w *packetStream) readPackets(ctx context.Context) {
 	go func() {
 		for {
 			if ctx.Err() != nil {
-				logrus.Errorf("closing packetStream reader %s", ctx.Err())
+				w.logger.Errorf("closing packetStream reader %s", ctx.Err())
 			}
 			err := binary.Read(w.stream, binary.BigEndian, &length)
 			if err != nil {
-				logrus.Errorf("Failed binary.Read packet: %s", err)
+				w.logger.Errorf("Failed binary.Read packet: %s", err)
 				w.packets <- packetContainer{err: err, payload: nil}
 				return
 			}
@@ -46,12 +48,12 @@ func (w *packetStream) readPackets(ctx context.Context) {
 
 				i, err := w.stream.Read(packet)
 				if err != nil {
-					logrus.Errorf("Failed to read packet: %s", err)
+					w.logger.Errorf("Failed to read packet: %s", err)
 					continue
 				}
 
 				if i != int(length) {
-					logrus.Errorf("Invalid packet size. Wanted: %d Read: %d", length, i)
+					w.logger.Errorf("Invalid packet size. Wanted: %d Read: %d", length, i)
 					continue
 				}
 

@@ -9,7 +9,6 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gogo/protobuf/proto"
-	"github.com/sirupsen/logrus"
 	"github.com/stampzilla/gocast/api"
 	"github.com/stampzilla/gocast/events"
 	"github.com/stampzilla/gocast/responses"
@@ -20,12 +19,12 @@ func (d *Device) reader(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			if ctx.Err() != nil {
-				logrus.Errorf("closing reader %s: %s", d.Name(), ctx.Err())
+				d.logger.Errorf("closing reader:  %s", ctx.Err())
 			}
 			return
 		case p := <-d.wrapper.packets:
 			if p.err != nil {
-				logrus.Errorf("Error reading from chromecast error: %s Packet: %#v", p.err, p)
+				d.logger.Errorf("Error reading from chromecast error: %s Packet: %#v", p.err, p)
 				return
 			}
 			packet := p.payload
@@ -33,7 +32,7 @@ func (d *Device) reader(ctx context.Context) {
 			message := &api.CastMessage{}
 			err := proto.Unmarshal(packet, message)
 			if err != nil {
-				logrus.Errorf("Failed to unmarshal CastMessage: %s", err)
+				d.logger.Errorf("Failed to unmarshal CastMessage: %s", err)
 				continue
 			}
 
@@ -42,7 +41,7 @@ func (d *Device) reader(ctx context.Context) {
 			err = json.Unmarshal([]byte(*message.PayloadUtf8), headers)
 
 			if err != nil {
-				logrus.Errorf("Failed to unmarshal message: %s", err)
+				d.logger.Errorf("Failed to unmarshal message: %s", err)
 				continue
 			}
 
@@ -54,8 +53,8 @@ func (d *Device) reader(ctx context.Context) {
 			}
 
 			if !catched {
-				logrus.Debug("LOST MESSAGE:")
-				logrus.Debug(spew.Sdump(message))
+				d.logger.Debug("LOST MESSAGE:")
+				d.logger.Debug(spew.Sdump(message))
 			}
 		}
 	}
@@ -63,7 +62,7 @@ func (d *Device) reader(ctx context.Context) {
 
 func (d *Device) Connect(ctx context.Context) error {
 	d.heartbeatHandler.OnFailure = func() { // make sure we reconnect if we loose heartbeat
-		logrus.Errorf("heartbeat timeout for: %s trying to reconnect", d.Name())
+		d.logger.Errorf("heartbeat timeout, trying to reconnect")
 
 		d.Disconnect()
 		for { // try to connect until no error
@@ -71,7 +70,7 @@ func (d *Device) Connect(ctx context.Context) error {
 			if err == nil {
 				break
 			}
-			logrus.Error("error reconnect: ", err)
+			d.logger.Error("error reconnect: ", err)
 			time.Sleep(2 * time.Second)
 		}
 	}
@@ -82,19 +81,16 @@ func (d *Device) connect(pCtx context.Context) error {
 	ctx, cancel := context.WithCancel(pCtx)
 	d.stop = cancel
 
-	ip := d.Ip()
-	port := d.Port()
-
-	logrus.Infof("connecting to %s:%d ...", ip, port)
+	d.logger.Info("connecting")
 
 	if d.getConn() != nil {
 		err := d.conn.Close()
 		if err != nil {
-			logrus.Error("trying to connect with existing connection. error closing: ", err)
+			d.logger.Error("trying to connect with existing connection. error closing: ", err)
 		}
 	}
 
-	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", ip, port), &tls.Config{
+	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", d.Ip(), d.Port()), &tls.Config{
 		InsecureSkipVerify: true,
 	})
 
@@ -104,10 +100,9 @@ func (d *Device) connect(pCtx context.Context) error {
 
 	d.Lock()
 	d.conn = conn
-	d.connected = true
 	d.Unlock()
 
-	d.wrapper = NewPacketStream(d.conn)
+	d.wrapper = NewPacketStream(d.conn, d.logger)
 	go d.wrapper.readPackets(ctx)
 	go d.reader(ctx)
 
@@ -121,10 +116,10 @@ func (d *Device) connect(pCtx context.Context) error {
 }
 
 func (d *Device) Disconnect() {
-	logrus.Debug("disconnecting: ", d.Name())
+	d.logger.Debug("disconnecting: ", d.Name())
 
 	for _, subscription := range d.getSubscriptionsAsSlice() {
-		logrus.Debugf("disconnect subscription %s: %s ", d.Name(), subscription.Urn)
+		d.logger.Debugf("disconnect subscription: %s ", subscription.Urn)
 		subscription.Handler.Disconnect()
 	}
 	d.Lock()
@@ -141,10 +136,6 @@ func (d *Device) Disconnect() {
 		d.conn = nil
 		d.Unlock()
 	}
-
-	d.Lock()
-	d.connected = false
-	d.Unlock()
 
 	d.Dispatch(events.Disconnected{})
 }
@@ -173,7 +164,7 @@ func (d *Device) Send(urn, sourceId, destinationId string, payload responses.Pay
 	}
 
 	if *message.Namespace != "urn:x-cast:com.google.cast.tp.heartbeat" {
-		logrus.Debugf("Writing to %s: %s", d.Name(), spew.Sdump(message))
+		d.logger.Debugf("Writing: %s", spew.Sdump(message))
 	}
 
 	if d.conn == nil {

@@ -56,9 +56,9 @@ func discoveryListner(discovery *discovery.Service) {
 
 		device.Connect(context.Background())
 
-		//go func() {
-		//<-time.After(time.Second * 10)
-		//device.Disconnect()
-		//}()
+		// go func() {
+		// <-time.After(time.Second * 10)
+		// device.Disconnect()
+		// }()
 	}
 }

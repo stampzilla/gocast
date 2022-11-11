@@ -120,16 +120,31 @@ func (d *Service) listner(ctx context.Context) {
 			key := info["id"] // Use device ID as key, allowes the device to change IP
 
 			if dev, ok := d.foundDevices[key]; ok {
-				// If not connected, update address so we can reconnect to it
-				if !dev.Connected() {
+				changed := false
+				if !entry.AddrV4.Equal(dev.Ip()) {
 					dev.SetIp(entry.AddrV4)
-					dev.SetPort(entry.Port)
+					changed = true
 				}
-				// Skip already connected devices
+				if entry.Port != dev.Port() {
+					dev.SetPort(entry.Port)
+					changed = true
+				}
+				if changed {
+					dev.SetLogger(logrus.WithFields(logrus.Fields{
+						"ip":   entry.AddrV4.String(),
+						"port": entry.Port,
+						"name": info["fn"],
+					}))
+				}
 				continue
 			}
 
-			device := gocast.NewDevice()
+			device := gocast.NewDevice(logrus.WithFields(logrus.Fields{
+				"ip":   entry.AddrV4.String(),
+				"port": entry.Port,
+				"name": info["fn"],
+			}))
+
 			device.SetIp(entry.AddrV4)
 			device.SetPort(entry.Port)
 

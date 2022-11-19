@@ -53,7 +53,7 @@ func (w *packetStream) readPackets(ctx context.Context) {
 				}
 
 				if i != int(length) {
-					w.logger.Errorf("Invalid packet size. Wanted: %d Read: %d", length, i)
+					w.logger.Errorf("Invalid packet size. Wanted: %d Read: %d Data: %s", length, i, string(packet))
 					continue
 				}
 

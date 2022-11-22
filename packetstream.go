@@ -46,14 +46,14 @@ func (w *packetStream) readPackets(ctx context.Context) {
 			if length > 0 {
 				packet := make([]byte, length)
 
-				i, err := w.stream.Read(packet)
+				i, err := io.ReadFull(w.stream, packet)
 				if err != nil {
 					w.logger.Errorf("Failed to read packet: %s", err)
 					continue
 				}
 
 				if i != int(length) {
-					w.logger.Errorf("Invalid packet size. Wanted: %d Read: %d Data: %s", length, i, string(packet))
+					w.logger.Errorf("Invalid packet size. Wanted: %d Read: %d Data: %s ... (capped)", length, i, string(packet[:500]))
 					continue
 				}
 

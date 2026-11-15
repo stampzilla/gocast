@@ -37,38 +37,34 @@ func (d *Service) periodic(ctx context.Context, interval time.Duration) error {
 		return fmt.Errorf("Periodic discovery is already running")
 	}
 
-	c, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-	err := mdns.Query(&mdns.QueryParam{
-		Service: "_googlecast._tcp",
-		Domain:  "local",
-		Timeout: time.Second * 1,
-		Entries: d.entriesCh,
-		Context: c,
-	})
-
-	if err != nil {
-		logrus.Error("error doing mdns query: ", err)
+	// Each query needs its own context. mdns ignores Timeout when a Context is
+	// given, so reusing an already cancelled context makes the query return
+	// immediately without collecting any responses.
+	query := func() {
+		c, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		err := mdns.Query(&mdns.QueryParam{
+			Service: "_googlecast._tcp",
+			Domain:  "local",
+			Entries: d.entriesCh,
+			Context: c,
+		})
+		if err != nil {
+			logrus.Error("error doing mdns query: ", err)
+		}
 	}
+
+	query()
 
 	ticker := time.NewTicker(interval)
 	atomic.AddUint32(&d.periodicRunning, 1)
 	go func() {
+		defer ticker.Stop()
 		for {
-			err := mdns.Query(&mdns.QueryParam{
-				Service: "_googlecast._tcp",
-				Domain:  "local",
-				Timeout: time.Second * 1,
-				Entries: d.entriesCh,
-				Context: c,
-			})
-			if err != nil {
-				logrus.Error("error doing mdns query: ", err)
-			}
 			select {
 			case <-ticker.C:
+				query()
 			case <-ctx.Done():
-				ticker.Stop()
 				logrus.Debug("stopping periodic goroutine")
 				return
 			}
@@ -160,6 +156,9 @@ func (d *Service) listner(ctx context.Context) {
 					<-delay.C
 				}
 			case <-delay.C:
+				// Nobody received it, forget it so it is offered again on the next scan.
+				logrus.Warnf("discovery: no receiver for device %s, will retry on next scan", info["fn"])
+				delete(d.foundDevices, key)
 			}
 		}
 	}

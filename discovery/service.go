@@ -4,20 +4,29 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"net"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/micro/mdns"
+	"github.com/libp2p/zeroconf/v2"
 	"github.com/sirupsen/logrus"
 	"github.com/stampzilla/gocast"
 )
 
+const queryTimeout = 3 * time.Second
+
+type entry struct {
+	ip   net.IP
+	port int
+	info map[string]string
+}
+
 type Service struct {
 	found     chan *gocast.Device
-	entriesCh chan *mdns.ServiceEntry
+	entriesCh chan entry
 
 	foundDevices    map[string]*gocast.Device
 	periodicRunning uint32
@@ -27,7 +36,7 @@ type Service struct {
 func NewService() *Service {
 	return &Service{
 		found:        make(chan *gocast.Device),
-		entriesCh:    make(chan *mdns.ServiceEntry),
+		entriesCh:    make(chan entry),
 		foundDevices: make(map[string]*gocast.Device),
 	}
 }
@@ -37,24 +46,7 @@ func (d *Service) periodic(ctx context.Context, interval time.Duration) error {
 		return fmt.Errorf("Periodic discovery is already running")
 	}
 
-	// Each query needs its own context. mdns ignores Timeout when a Context is
-	// given, so reusing an already cancelled context makes the query return
-	// immediately without collecting any responses.
-	query := func() {
-		c, cancel := context.WithTimeout(ctx, time.Second)
-		defer cancel()
-		err := mdns.Query(&mdns.QueryParam{
-			Service: "_googlecast._tcp",
-			Domain:  "local",
-			Entries: d.entriesCh,
-			Context: c,
-		})
-		if err != nil {
-			logrus.Error("error doing mdns query: ", err)
-		}
-	}
-
-	query()
+	d.query(ctx)
 
 	ticker := time.NewTicker(interval)
 	atomic.AddUint32(&d.periodicRunning, 1)
@@ -63,7 +55,7 @@ func (d *Service) periodic(ctx context.Context, interval time.Duration) error {
 		for {
 			select {
 			case <-ticker.C:
-				query()
+				d.query(ctx)
 			case <-ctx.Done():
 				logrus.Debug("stopping periodic goroutine")
 				return
@@ -72,6 +64,56 @@ func (d *Service) periodic(ctx context.Context, interval time.Duration) error {
 	}()
 
 	return nil
+}
+
+// query browses for chromecasts for a few seconds and forwards every complete
+// entry to the listener.
+//
+// zeroconf sends its queries from port 5353, so devices answer with multicast.
+// That is required for devices on other subnets reached through an mDNS
+// reflector, which only repeats multicast and never forwards the unicast
+// replies that queries from a random source port get.
+func (d *Service) query(ctx context.Context) {
+	c, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	results := make(chan *zeroconf.ServiceEntry)
+	browseDone := make(chan struct{})
+	readerDone := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		for {
+			select {
+			case e, ok := <-results:
+				if !ok {
+					return
+				}
+				if len(e.AddrIPv4) == 0 {
+					continue
+				}
+				select {
+				case d.entriesCh <- entry{
+					ip:   e.AddrIPv4[0],
+					port: e.Port,
+					info: decodeTxtRecord(e.Text),
+				}:
+				case <-ctx.Done():
+				}
+			case <-browseDone:
+				// Browse has returned and sends nothing more. It does not close
+				// results if it failed before it started listening.
+				return
+			}
+		}
+	}()
+
+	// Browse blocks until c is done.
+	err := zeroconf.Browse(c, "_googlecast._tcp", "local.", results, zeroconf.SelectIPTraffic(zeroconf.IPv4))
+	if err != nil {
+		logrus.Error("error doing mdns query: ", err)
+	}
+	close(browseDone)
+	<-readerDone
 }
 
 func (d *Service) Start(pCtx context.Context, interval time.Duration) {
@@ -103,32 +145,26 @@ func (d *Service) listner(ctx context.Context) {
 			d.foundDevices = make(map[string]*gocast.Device)
 			return
 		case entry := <-d.entriesCh:
-			// fmt.Printf("Got new entry: %#v\n", entry)
-
-			name := strings.Split(entry.Name, "._googlecast")
-
-			// Skip everything that dont have googlecast in the fdqn
-			if len(name) < 2 {
+			info := entry.info
+			key := info["id"] // Use device ID as key, allowes the device to change IP
+			if key == "" {
 				continue
 			}
 
-			info := decodeTxtRecord(entry.Info)
-			key := info["id"] // Use device ID as key, allowes the device to change IP
-
 			if dev, ok := d.foundDevices[key]; ok {
 				changed := false
-				if !entry.AddrV4.Equal(dev.Ip()) {
-					dev.SetIp(entry.AddrV4)
+				if !entry.ip.Equal(dev.Ip()) {
+					dev.SetIp(entry.ip)
 					changed = true
 				}
-				if entry.Port != dev.Port() {
-					dev.SetPort(entry.Port)
+				if entry.port != dev.Port() {
+					dev.SetPort(entry.port)
 					changed = true
 				}
 				if changed {
 					dev.SetLogger(logrus.WithFields(logrus.Fields{
-						"ip":   entry.AddrV4.String(),
-						"port": entry.Port,
+						"ip":   entry.ip.String(),
+						"port": entry.port,
 						"name": info["fn"],
 					}))
 				}
@@ -136,13 +172,13 @@ func (d *Service) listner(ctx context.Context) {
 			}
 
 			device := gocast.NewDevice(logrus.WithFields(logrus.Fields{
-				"ip":   entry.AddrV4.String(),
-				"port": entry.Port,
+				"ip":   entry.ip.String(),
+				"port": entry.port,
 				"name": info["fn"],
 			}))
 
-			device.SetIp(entry.AddrV4)
-			device.SetPort(entry.Port)
+			device.SetIp(entry.ip)
+			device.SetPort(entry.port)
 
 			device.SetUuid(key)
 			device.SetName(info["fn"])
@@ -181,19 +217,18 @@ func decodeDnsEntry(text string) string {
 	return text
 }
 
-func decodeTxtRecord(txt string) map[string]string {
+func decodeTxtRecord(txt []string) map[string]string {
 	m := make(map[string]string)
 
-	s := strings.Split(txt, "|")
-	for _, v := range s {
-		s := strings.Split(v, "=")
-		if len(s) == 2 {
-			if s[0] == "fn" { // Friendly name
-				m[s[0]] = decodeDnsEntry(s[1])
-			} else {
-				m[s[0]] = s[1]
-			}
+	for _, v := range txt {
+		k, val, ok := strings.Cut(v, "=")
+		if !ok {
+			continue
 		}
+		if k == "fn" { // Friendly name
+			val = decodeDnsEntry(val)
+		}
+		m[k] = val
 	}
 
 	return m
